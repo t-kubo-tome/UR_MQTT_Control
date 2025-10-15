@@ -19,7 +19,7 @@ import modern_robotics as mr
 import numpy as np
 from dotenv import load_dotenv
 
-from cobotta_control.config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
+from ur_control.config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
 
 package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'vendor'))
 sys.path.append(package_dir)
@@ -29,7 +29,7 @@ from denso_robot import E_ACCEL_AUTO_RECOVERABLE_SET, E_AUTO_RECOVERABLE_SET, E_
 
 from filter import SMAFilter
 from interpolate import DelayedInterpolator
-from cobotta_control.tools import tool_infos, tool_classes, tool_base
+from ur_control.tools import tool_infos, tool_classes, tool_base
 
 
 # パラメータ

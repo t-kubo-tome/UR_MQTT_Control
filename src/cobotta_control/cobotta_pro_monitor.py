@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, TextIO
 from paho.mqtt import client as mqtt
 from bcap_python.orinexception import HResult, ORiNException
-from cobotta_control.config import SHM_NAME, SHM_SIZE, T_INTV
+from ur_control.config import SHM_NAME, SHM_SIZE, T_INTV
 from denso_robot import DensoRobot
 
 import datetime
@@ -21,13 +21,13 @@ import numpy as np
 
 from dotenv import load_dotenv
 
-from cobotta_control.tools import tool_infos, tool_classes
+from ur_control.tools import tool_infos, tool_classes
 
 # パラメータ
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
 ROBOT_IP = os.getenv("ROBOT_IP", "192.168.5.45")
 HAND_IP = os.getenv("HAND_IP", "192.168.5.46")
-ROBOT_UUID = os.getenv("ROBOT_UUID","cobotta-pro-real")
+ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
 MQTT_SERVER = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
 MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")+"/"+ROBOT_UUID
 MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-Cobotta-Pro-Control-IK")

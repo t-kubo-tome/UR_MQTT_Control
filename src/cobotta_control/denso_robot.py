@@ -99,7 +99,7 @@ class DensoRobot:
     """
     def __init__(
         self,
-        name: str = "denso_cobotta_pro_900",
+        name: str = "denso_ur_900",
         default_servo_mode: int = 0x001,
         default_fig: int = -2,
         host: str = "192.168.5.45",

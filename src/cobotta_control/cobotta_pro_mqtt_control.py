@@ -19,10 +19,10 @@ import uuid
 
 package_dir = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(package_dir)
-from cobotta_control.config import SHM_NAME, SHM_SIZE
-from cobotta_pro_control import Cobotta_Pro_CON, Cobotta_Pro_CON_Archiver
-from cobotta_pro_monitor import Cobotta_Pro_MON
-from cobotta_pro_monitor_gui import run_joint_monitor_gui
+from ur_control.config import SHM_NAME, SHM_SIZE
+from ur_control import Cobotta_Pro_CON, Cobotta_Pro_CON_Archiver
+from ur_monitor import Cobotta_Pro_MON
+from ur_monitor_gui import run_joint_monitor_gui
 
 from dotenv import load_dotenv
 
@@ -30,8 +30,8 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
 MQTT_SERVER = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
 MQTT_CTRL_TOPIC = os.getenv("MQTT_CTRL_TOPIC", "control")
-ROBOT_UUID = os.getenv("ROBOT_UUID","cobotta-pro-real")
-ROBOT_MODEL = os.getenv("ROBOT_MODEL","cobotta-pro-real")
+ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
+ROBOT_MODEL = os.getenv("ROBOT_MODEL","ur-real")
 MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "mgr")
 MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "dev")+"/"+ROBOT_UUID
 MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-Cobotta-Pro-Control-IK")

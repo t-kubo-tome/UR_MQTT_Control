@@ -12,9 +12,9 @@ from typing import Optional
 
 import numpy as np
 
-from cobotta_control.cobotta_pro_mqtt_control import ProcessManager
-from cobotta_control.config import SHM_NAME, SHM_SIZE
-from cobotta_control.tools import tool_infos
+from ur_control.ur_mqtt_control import ProcessManager
+from ur_control.config import SHM_NAME, SHM_SIZE
+from ur_control.tools import tool_infos
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
