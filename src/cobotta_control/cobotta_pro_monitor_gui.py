@@ -112,7 +112,7 @@ class JointMonitorPlot(QtWidgets.QWidget):
 def run_joint_monitor_gui():
     app = QtWidgets.QApplication(sys.argv)
     win = JointMonitorPlot()
-    win.setWindowTitle('Cobotta Pro Joint Monitor')
+    win.setWindowTitle('UR Joint Monitor')
     win.show()
     sys.exit(app.exec())
 

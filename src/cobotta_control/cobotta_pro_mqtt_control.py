@@ -1,4 +1,4 @@
-# Cobotta ProをMQTTで制御する
+# URをMQTTで制御する
 
 import json
 import logging
@@ -20,8 +20,8 @@ import uuid
 package_dir = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(package_dir)
 from ur_control.config import SHM_NAME, SHM_SIZE
-from ur_control import Cobotta_Pro_CON, Cobotta_Pro_CON_Archiver
-from ur_monitor import Cobotta_Pro_MON
+from ur_control import UR_CON, UR_CON_Archiver
+from ur_monitor import UR_MON
 from ur_monitor_gui import run_joint_monitor_gui
 
 from dotenv import load_dotenv
@@ -34,10 +34,10 @@ ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
 ROBOT_MODEL = os.getenv("ROBOT_MODEL","ur-real")
 MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "mgr")
 MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "dev")+"/"+ROBOT_UUID
-MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-Cobotta-Pro-Control-IK")
+MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-UR-Control-IK")
 MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
 
-class Cobotta_Pro_MQTT:
+class UR_MQTT:
     def __init__(self):
         self.mqtt_ctrl_topic = None
         self.last_registered = None
@@ -92,7 +92,7 @@ class Cobotta_Pro_MQTT:
                 joints=['j1','j2','j3','j4','j5','j6']
                 rot =[js[x]  for x in joints]    
                 joint_q = [x for x in rot]
-            elif MQTT_FORMAT == "Denso-Cobotta-Pro-Control-IK":
+            elif MQTT_FORMAT == "Denso-UR-Control-IK":
                 # 7要素入っているが6要素でよいため
                 rot = js["joints"][:6]
                 joint_q = [x for x in rot]
@@ -289,7 +289,7 @@ class ProcessManager:
             multiprocessing.Pipe()
 
     def startRecvMQTT(self):
-        self.recv = Cobotta_Pro_MQTT()
+        self.recv = UR_MQTT()
         self.recvP = Process(
             target=self.recv.run_proc,
             args=(self.mqtt_control_dict,
@@ -300,7 +300,7 @@ class ProcessManager:
         self.state_recv_mqtt = True
 
     def startMonitor(self, logging_dir: str | None = None, disable_mqtt: bool = False):
-        self.mon = Cobotta_Pro_MON()
+        self.mon = UR_MON()
         self.monP = Process(
             target=self.mon.run_proc,
             args=(self.monitor_dict,
@@ -310,19 +310,19 @@ class ProcessManager:
                   self.monitor_pipe,
                   logging_dir,
                   disable_mqtt),
-            name="Cobotta-Pro-monitor")
+            name="UR-monitor")
         self.monP.start()
         self.state_monitor = True
 
     def startControl(self, logging_dir: str | None = None):
-        self.ctrl = Cobotta_Pro_CON()
+        self.ctrl = UR_CON()
         self.ctrlP = Process(
             target=self.ctrl.run_proc,
             args=(self.control_pipe, self.slave_mode_lock, self.log_queue, logging_dir, self.control_to_archiver_queue),
-            name="Cobotta-Pro-control")
+            name="UR-control")
         self.ctrlP.start()
 
-        self.ctrl_archiver = Cobotta_Pro_CON_Archiver()
+        self.ctrl_archiver = UR_CON_Archiver()
         self.ctrl_archiverP = Process(
             target=self.ctrl_archiver.run_proc,
             args=(self.control_archiver_pipe,
@@ -330,14 +330,14 @@ class ProcessManager:
                   logging_dir,
                   self.control_to_archiver_queue,
                   ),
-            name="Cobotta-Pro-control-archiver")
+            name="UR-control-archiver")
         self.ctrl_archiverP.start()
         self.state_control = True
 
     def startMonitorGUI(self):
         self.monitor_guiP = Process(
             target=run_joint_monitor_gui,
-            name="Cobotta-Pro-monitor-gui",
+            name="UR-monitor-gui",
         )
         self.monitor_guiP.start()
         self.state_monitor_gui = True

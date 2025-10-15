@@ -1,4 +1,4 @@
-# Cobotta Proを制御する
+# URを制御する
 
 import logging
 import queue
@@ -144,7 +144,7 @@ class StopWatch:
         return s
 
 
-class Cobotta_Pro_CON:
+class UR_CON:
     def __init__(self):
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
@@ -1887,7 +1887,7 @@ class Cobotta_Pro_CON:
                 break
 
 
-class Cobotta_Pro_CON_Archiver:
+class UR_CON_Archiver:
     def monitor_start(self, f: TextIO | None = None):
         while True:
             # ログファイル変更時

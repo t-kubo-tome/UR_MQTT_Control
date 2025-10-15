@@ -1,4 +1,4 @@
-# Cobotta Pro の状態をモニタリングする
+# UR の状態をモニタリングする
 
 import logging
 from typing import Any, Dict, List, TextIO
@@ -30,7 +30,7 @@ HAND_IP = os.getenv("HAND_IP", "192.168.5.46")
 ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
 MQTT_SERVER = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
 MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")+"/"+ROBOT_UUID
-MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-Cobotta-Pro-Control-IK")
+MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-UR-Control-IK")
 MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
 SAVE = os.getenv("SAVE", "true") == "true"
 
@@ -38,7 +38,7 @@ SAVE = os.getenv("SAVE", "true") == "true"
 save_state = SAVE
 
 
-class Cobotta_Pro_MON:
+class UR_MON:
     def __init__(self):
         pass
 
@@ -245,7 +245,7 @@ class Cobotta_Pro_MON:
                     joints = ['j1','j2','j3','j4','j5','j6']
                     actual_joint_js.update({
                         k: v for k, v in zip(joints, actual_joint)})
-                elif MQTT_FORMAT == 'Denso-Cobotta-Pro-Control-IK':
+                elif MQTT_FORMAT == 'Denso-UR-Control-IK':
                     # 7要素送る必要があるのでダミーの[0]を追加
                     actual_joint_js.update({"joints": list(actual_joint) + [0]})
                     # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
@@ -489,7 +489,7 @@ class Cobotta_Pro_MON:
 
 
 if __name__ == '__main__':
-    cp = Cobotta_Pro_MON()
+    cp = UR_MON()
     cp.init_realtime()
     cp.init_robot()
     cp.connect_mqtt()

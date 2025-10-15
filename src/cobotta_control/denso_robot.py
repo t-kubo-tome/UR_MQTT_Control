@@ -91,7 +91,7 @@ E_EMERGENCY_STOP_SET = set(df.loc[df["非常停止エラー"].astype(bool), "コ
 ))
 
 class DensoRobot:
-    """Denso Cobotta Pro 900の制御クラス。
+    """Denso URの制御クラス。
 
     ハンド OnRobot 2FG7 を使う場合はツール座標系を
     状態取得プロセスと制御プロセスで揃える必要があるので、
@@ -244,7 +244,7 @@ class DensoRobot:
         self.enable_wo_clear_error()
 
     def enable_wo_clear_error(self) -> None:
-        # Cobotta Proの手動モードではイネーブル前に
+        # URの手動モードではイネーブル前に
         # マニュアルリセットするのでそれに倣ったフローにしている
         # STO状態（セーフティ状態）を解除する
         self.manual_reset()
@@ -371,7 +371,7 @@ class DensoRobot:
         # @Pは、目標位置の近く（自動設定）にエンコーダ値が到達したら次のコマンドに移行する。
         # @<数字>は、@Pを、目標位置の近くを数字（mm）に設定した上で実行。
         # J(J1, J2, J3, J4, J5, J6, J7, J8)はTCP点の位置、姿勢、形態
-        # Cobotta Pro 900では関節数は6
+        # URでは関節数は6
         joint_all = [0] * 8
         for i, j in enumerate(joint):
             joint_all[i] = j
@@ -889,7 +889,7 @@ class DensoRobot:
 
     def get_current_joint(self):
         # コントローラ内部で一定周期（8ms）に更新された現在位置をJ 型で取得する
-        # 8関節分出るがCobotta Pro 900は6関節分のみ有効
+        # 8関節分出るがURは6関節分のみ有効
         # 非常停止中も実行できる
         # 所要時間は1ms程度
         cur_jnt = self._bcap.robot_execute(self._hRob, "CurJnt")

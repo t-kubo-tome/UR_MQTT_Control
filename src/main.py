@@ -130,7 +130,7 @@ class MQTTWin:
         self.logger.info("Starting Process!")
  
         self.root = root
-        self.root.title("MQTT-CobottaPro900 Controller")
+        self.root.title("MQTT-UR Controller")
         self.root.geometry("1100x1000")
 
         for col in range(10):
