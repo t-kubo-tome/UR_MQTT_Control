@@ -42,7 +42,11 @@ class UR_MON:
     def __init__(self):
         pass
 
+    def format_error(self, e: Exception) -> str:
+        return self.robot.format_error(e)
+
     def init_robot(self):
+        # ロボット固有の処理を含む
         self.robot = DensoRobot(host=ROBOT_IP, logger=self.robot_logger)
         self.robot.start()
         self.robot.clear_error()
@@ -50,6 +54,7 @@ class UR_MON:
         self.find_and_setup_hand(tool_id)
 
     def find_and_setup_hand(self, tool_id):
+        # ロボット固有の処理を含む
         connected = False
         tool_info = self.get_tool_info(tool_infos, tool_id)
         name = tool_info["name"]
@@ -65,6 +70,7 @@ class UR_MON:
         self.tool_id = tool_id
 
     def reconnect_after_timeout(self, e: Exception) -> bool:
+        # ロボット固有の処理を含む
         if ((type(e) is ORiNException and
             e.hresult == HResult.E_TIMEOUT) or
             (type(e) is not ORiNException)):
@@ -81,7 +87,7 @@ class UR_MON:
                         self.logger.error(
                             "Error in reconnecting robot")
                         self.logger.error(
-                            f"{self.robot.format_error_wo_desc(e)}")
+                            f"{self.format_error(e)}")
                     time.sleep(1)
                 self.logger.error(
                     "Failed to reconnect robot after"
@@ -136,6 +142,7 @@ class UR_MON:
                 if tool_info["id"] == tool_id][0]
 
     def monitor_start(self, f: TextIO | None = None):
+        # ロボット固有の処理を含む
         last = 0
         last_error_monitored = 0
         is_in_tool_change = False
@@ -225,9 +232,9 @@ class UR_MON:
                 actual_tcp_pose = self.robot.get_current_pose()
             except Exception as e:
                 if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.warning(f"{self.format_error(e)}")
                 else:
-                    self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.error(f"{self.format_error(e)}")
                 self.reconnect_after_timeout(e)
                 actual_tcp_pose = None
             # 関節
@@ -235,9 +242,9 @@ class UR_MON:
                 actual_joint = self.robot.get_current_joint()
             except Exception as e:
                 if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.warning(f"{self.format_error(e)}")
                 else:
-                    self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.error(f"{self.format_error(e)}")
                 self.reconnect_after_timeout(e)
                 actual_joint = None
             if actual_joint is not None:
@@ -264,9 +271,9 @@ class UR_MON:
                 forces = self.robot.ForceValue()
             except Exception as e:
                 if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.warning(f"{self.format_error(e)}")
                 else:
-                    self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.error(f"{self.format_error(e)}")
                 self.reconnect_after_timeout(e)
                 forces = None
             if forces is not None:
@@ -297,9 +304,9 @@ class UR_MON:
                 enabled = self.robot.is_enabled()
             except Exception as e:
                 if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.warning(f"{self.format_error(e)}")
                 else:
-                    self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.error(f"{self.format_error(e)}")
                 self.reconnect_after_timeout(e)
                 enabled = False
             actual_joint_js["enabled"] = enabled
@@ -310,9 +317,9 @@ class UR_MON:
                 is_in_servo_mode = self.robot.is_in_servo_mode()
             except Exception as e:
                 if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.warning(f"{self.format_error(e)}")
                 else:
-                    self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                    self.logger.error(f"{self.format_error(e)}")
                 self.reconnect_after_timeout(e)
             # 切り替わるときにログを出す
             if  is_in_servo_mode != last_is_in_servo_mode:
@@ -336,10 +343,9 @@ class UR_MON:
                         errors = self.robot.get_cur_error_info_all()
                     except Exception as e:
                         if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                            self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                            self.logger.warning(f"{self.format_error(e)}")
                         else:
-                            self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
-                        self.logger.error(f"{self.robot.format_error(e)}")
+                            self.logger.error(f"{self.format_error(e)}")
                         self.reconnect_after_timeout(e)
                         errors = []
                     # 制御プロセスのエラー検出と方法が違うので、
@@ -355,9 +361,9 @@ class UR_MON:
                         is_emergency_stopped = self.robot.is_emergency_stopped()
                     except Exception as e:
                         if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                            self.logger.warning(f"{self.robot.format_error_wo_desc(e)}")
+                            self.logger.warning(f"{self.format_error(e)}")
                         else:
-                            self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                            self.logger.error(f"{self.format_error(e)}")
                         self.reconnect_after_timeout(e)
             # 切り替わるときにログを出す
             if is_emergency_stopped != last_is_emergency_stopped:
@@ -475,7 +481,7 @@ class UR_MON:
                     self.get_logging_dir_and_change_log_file()
             except Exception as e:
                 self.logger.error("Error in monitor")
-                self.logger.error(f"{self.robot.format_error_wo_desc(e)}")
+                self.logger.error(f"{self.format_error(e)}")
             if self.pose[32] == 1:
                 if self.client is not None:
                     self.client.loop_stop()
