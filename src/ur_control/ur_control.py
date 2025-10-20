@@ -31,10 +31,13 @@ from ur_control.tools import tool_infos, tool_classes, tool_base
 
 # パラメータ
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
-ROBOT_IP = os.getenv("ROBOT_IP", "192.168.5.45")
-HAND_IP = os.getenv("HAND_IP", "192.168.5.46")
 SAVE = os.getenv("SAVE", "true") == "true"
 MOVE = os.getenv("MOVE", "true") == "true"
+# Simulated robot
+# robot_ip = "127.0.0.1"
+# Real robot
+# robot_ip = "10.5.5.102"
+ROBOT_IP = os.getenv("ROBOT_IP", "10.5.5.102")
 
 # 基本的に運用時には固定するパラメータ
 # 実際にロボットを制御するかしないか (VRとの結合時のデバッグ用)
@@ -148,18 +151,26 @@ class UR_CON:
 
     def init_robot(self):
         try:
-            self.robot = DensoRobot(
-                host=ROBOT_IP,
-                default_servo_mode=servo_mode,
-                logger=self.robot_logger,
+            # 500Hz is default of e-Series and UR-Series
+            rtde_frequency = 500.0
+            flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
+            # URCap機能用のポート (デフォルト値)
+            ur_cap_port = 50002
+            rt_control_priority = 85
+            self.rtde_c = RTDEControl(
+                ROBOT_IP,
+                rtde_frequency,
+                flags,
+                ur_cap_port,
+                rt_control_priority,
             )
-            self.robot.start()
-            self.robot.clear_error()
-            self.robot.take_arm()
-            self.robot.SetAreaEnabled(0, True)
-            self.pose[31] = 1
-            tool_id = int(os.environ["TOOL_ID"])
-            self.find_and_setup_hand(tool_id)
+            # TODO: URに以下のような設定が必要なら追加
+            # self.robot.clear_error()
+            # self.robot.take_arm()
+            # self.robot.SetAreaEnabled(0, True)
+            # self.pose[31] = 1
+            # tool_id = int(os.environ["TOOL_ID"])
+            # self.find_and_setup_hand(tool_id)
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
             self.logger.error(f"{self.format_error(e)}")
