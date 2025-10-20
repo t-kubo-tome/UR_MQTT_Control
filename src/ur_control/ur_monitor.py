@@ -3,9 +3,6 @@
 import logging
 from typing import Any, Dict, List, TextIO
 from paho.mqtt import client as mqtt
-from bcap_python.orinexception import HResult, ORiNException
-from ur_control.config import SHM_NAME, SHM_SIZE, T_INTV
-from denso_robot import DensoRobot
 
 import datetime
 import time
@@ -21,7 +18,14 @@ import numpy as np
 
 from dotenv import load_dotenv
 
+from ur_control.config import SHM_NAME, SHM_SIZE, T_INTV
 from ur_control.tools import tool_infos, tool_classes
+from ur_control.utils import rad2deg_list
+
+# Robot specific modules
+from ur_control.ur_robot import RobotMode
+from rtde_receive import RTDEReceiveInterface as RTDEReceive
+
 
 # パラメータ
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
@@ -47,11 +51,22 @@ class UR_MON:
 
     def init_robot(self):
         # ロボット固有の処理を含む
-        self.robot = DensoRobot(host=ROBOT_IP, logger=self.robot_logger)
-        self.robot.start()
-        self.robot.clear_error()
-        tool_id = int(os.environ["TOOL_ID"])
-        self.find_and_setup_hand(tool_id)
+        rtde_frequency = 500.0
+        # 例ではrt_control_priority (85) の方がreceiveより優位に設定しているため従う
+        rt_receive_priority = 90
+        self.rtde_r = RTDEReceive(
+            ROBOT_IP,
+            rtde_frequency,
+            [],  # variables to be monitored (empty for all)
+            True,  # verbose output for debugging
+            False,  # use_upper_range_registers, 詳細不明だが例ではFalse
+            rt_receive_priority,
+        )
+        # TODO: Cobottaのこれらに相当する処理はURで必要か
+        # self.robot.start()
+        # self.robot.clear_error()
+        # tool_id = int(os.environ["TOOL_ID"])
+        # self.find_and_setup_hand(tool_id)
 
     def find_and_setup_hand(self, tool_id):
         # ロボット固有の処理を含む
@@ -70,31 +85,33 @@ class UR_MON:
         self.tool_id = tool_id
 
     def reconnect_after_timeout(self, e: Exception) -> bool:
-        # ロボット固有の処理を含む
-        if ((type(e) is ORiNException and
-            e.hresult == HResult.E_TIMEOUT) or
-            (type(e) is not ORiNException)):
-                for i in range(1, 11):
-                    try:
-                        self.robot.start()
-                        self.robot.clear_error()
-                        self.find_and_setup_hand(self.tool_id)
-                        self.logger.info(
-                            "Reconnected to robot successfully"
-                            " after timeout")
-                        return True
-                    except Exception as e:
-                        self.logger.error(
-                            "Error in reconnecting robot")
-                        self.logger.error(
-                            f"{self.format_error(e)}")
-                    time.sleep(1)
-                self.logger.error(
-                    "Failed to reconnect robot after"
-                    " 10 attempts")
-                return False
-        else:
-            return True
+        # TODO
+        # # ロボット固有の処理を含む
+        # if ((type(e) is ORiNException and
+        #     e.hresult == HResult.E_TIMEOUT) or
+        #     (type(e) is not ORiNException)):
+        #         for i in range(1, 11):
+        #             try:
+        #                 self.robot.start()
+        #                 self.robot.clear_error()
+        #                 self.find_and_setup_hand(self.tool_id)
+        #                 self.logger.info(
+        #                     "Reconnected to robot successfully"
+        #                     " after timeout")
+        #                 return True
+        #             except Exception as e:
+        #                 self.logger.error(
+        #                     "Error in reconnecting robot")
+        #                 self.logger.error(
+        #                     f"{self.format_error(e)}")
+        #             time.sleep(1)
+        #         self.logger.error(
+        #             "Failed to reconnect robot after"
+        #             " 10 attempts")
+        #         return False
+        # else:
+        #     return True
+        return True
 
     def init_realtime(self):
         os_used = sys.platform
@@ -227,26 +244,23 @@ class UR_MON:
             if status_line_cut is not None:
                 actual_joint_js["line_cut"] = status_line_cut
 
+            # TODO: どう失敗するかはやってみないとわからなそう
             # TCP姿勢
             try:
-                actual_tcp_pose = self.robot.get_current_pose()
+                # 単位はmとrad
+                actual_tcp_pose = self.rtde_r.getActualTCPPose()
             except Exception as e:
-                if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.format_error(e)}")
-                else:
-                    self.logger.error(f"{self.format_error(e)}")
-                self.reconnect_after_timeout(e)
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
                 actual_tcp_pose = None
             # 関節
             try:
-                actual_joint = self.robot.get_current_joint()
+                actual_joint = rad2deg_list(self.rtde_r.getActualQ())
             except Exception as e:
-                if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.format_error(e)}")
-                else:
-                    self.logger.error(f"{self.format_error(e)}")
-                self.reconnect_after_timeout(e)
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
                 actual_joint = None
+            # TODO: フォーマットを確認
             if actual_joint is not None:
                 if MQTT_FORMAT == 'UR-realtime-control-MQTT':        
                     joints = ['j1','j2','j3','j4','j5','j6']
@@ -268,13 +282,10 @@ class UR_MON:
             actual_joint_js["time"] = time_ms
             # [X, Y, Z, RX, RY, RZ]: センサ値の力[N]とモーメント[Nm]
             try:
-                forces = self.robot.ForceValue()
+                forces = self.rtde_r.getActualTCPForce()
             except Exception as e:
-                if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.format_error(e)}")
-                else:
-                    self.logger.error(f"{self.format_error(e)}")
-                self.reconnect_after_timeout(e)
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
                 forces = None
             if forces is not None:
                 actual_joint_js["forces"] = forces
@@ -301,26 +312,23 @@ class UR_MON:
 
             # モータがONか
             try:
-                enabled = self.robot.is_enabled()
+                robot_mode = self.rtde_r.getRobotMode()
+                enabled = robot_mode in (
+                    RobotMode.ROBOT_MODE_IDLE, RobotMode.ROBOT_MODE_RUNNING)
             except Exception as e:
-                if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.format_error(e)}")
-                else:
-                    self.logger.error(f"{self.format_error(e)}")
-                self.reconnect_after_timeout(e)
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
                 enabled = False
             actual_joint_js["enabled"] = enabled
 
             # スレーブモードかどうかを取得する
             is_in_servo_mode = False
             try:
-                is_in_servo_mode = self.robot.is_in_servo_mode()
+                # NOTE: URではスレーブモード自体が存在しない
+                is_in_servo_mode = enabled
             except Exception as e:
-                if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                    self.logger.warning(f"{self.format_error(e)}")
-                else:
-                    self.logger.error(f"{self.format_error(e)}")
-                self.reconnect_after_timeout(e)
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
             # 切り替わるときにログを出す
             if  is_in_servo_mode != last_is_in_servo_mode:
                 if is_in_servo_mode:
@@ -342,11 +350,8 @@ class UR_MON:
                     try:
                         errors = self.robot.get_cur_error_info_all()
                     except Exception as e:
-                        if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                            self.logger.warning(f"{self.format_error(e)}")
-                        else:
-                            self.logger.error(f"{self.format_error(e)}")
-                        self.reconnect_after_timeout(e)
+                        self.logger.error(f"{self.format_error(e)}")
+                        # self.reconnect_after_timeout(e)
                         errors = []
                     # 制御プロセスのエラー検出と方法が違うので、
                     # 直後は状態プロセスでエラーが検出されないことがある
@@ -358,13 +363,10 @@ class UR_MON:
                             self.robot.are_all_errors_stateless(errors)
                         error["auto_recoverable"] = auto_recoverable
                     try:
-                        is_emergency_stopped = self.robot.is_emergency_stopped()
+                        is_emergency_stopped = self.rtde_r.isEmergencyStopped()
                     except Exception as e:
-                        if type(e) is ORiNException and self.robot.is_error_level_0(e):
-                            self.logger.warning(f"{self.format_error(e)}")
-                        else:
-                            self.logger.error(f"{self.format_error(e)}")
-                        self.reconnect_after_timeout(e)
+                        self.logger.error(f"{self.format_error(e)}")
+                        # self.reconnect_after_timeout(e)
             # 切り替わるときにログを出す
             if is_emergency_stopped != last_is_emergency_stopped:
                 if is_emergency_stopped:
