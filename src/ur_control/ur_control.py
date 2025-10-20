@@ -962,6 +962,85 @@ class UR_CON:
             time.sleep(0.008)
         self.pose[14] = 0
 
+    def should_recover_automatic_on_error(self, e_leave) -> bool:
+        # ロボット固有の処理を含む
+        return ((type(e_leave) is ORiNException and
+                 e_leave.hresult == HResult.E_TIMEOUT) or
+                 (type(e_leave) is not ORiNException))
+
+    def recover_automatic_on_timeout_error(self) -> bool:
+        # ロボット固有の処理を含む
+        for i in range(1, 11):
+            try:
+                self.robot.start()
+                self.robot.clear_error()
+
+                # NOTE: タイムアウトした場合の数回に1回、
+                # 制御権が取得できない場合がある。しかし、
+                # このメソッドのこの例外から抜けた後に
+                # GUIでClearError -> Enable -> StartMQTTControl
+                # とすると制御権が取得できる。
+                # ここで制御権を取得しても、GUIから制御権を取得しても
+                # 内部的には同じ関数を呼んでいるので原因不明
+                # (ソケットやbCAPClientのidが両者で同じことも確認済み)
+                # 0. 元
+                self.robot.take_arm()
+                # 1. ここをイネーブルにしても変わらない
+                # self.robot.enable_robot(ext_speed=speed_normal)
+                # 2. manual_resetを追加しても変わらない
+                # self.robot.manual_reset()
+                # self.robot.take_arm()
+                # 3. 待っても変わらない
+                # time.sleep(5)
+                # self.robot.take_arm()
+                # time.sleep(5)
+
+                self.find_and_setup_hand(self.tool_id)
+                self.logger.info(
+                    "Reconnected to robot successfully"
+                    " after timeout")
+                return True
+            except Exception as e_reconnect:
+                self.logger.error(
+                    "Error in reconnecting robot")
+                self.logger.error(
+                    f"{self.format_error(e_reconnect)}")
+                if i == 10:
+                    self.logger.error(
+                        "Failed to reconnect robot after"
+                        " 10 attempts")
+                    self.pose[16] = 0
+                    return False
+            time.sleep(1)
+
+    def recover_automatic_on_recoverable_error(self) -> bool:
+        try:
+            errors = self.robot.get_cur_error_info_all()
+            self.logger.error(f"Errors in teach pendant: {errors}")
+            # 自動復帰可能エラー
+            if self.robot.are_all_errors_stateless(errors):
+                # 自動復帰を試行。失敗またはエラーの場合は通常モードに戻る。
+                # エラー直後の自動復帰処理に失敗しても、
+                # 同じ復帰処理を手動で行うと成功することもあるので
+                # 手動で操作が可能な状態に戻す
+                ret = self.robot.recover_automatic_enable()
+                if not ret:
+                    raise ValueError(
+                        "Automatic recover failed in enable timeout")
+                self.logger.info("Automatic recover succeeded")
+                return True
+            # 自動復帰不可能エラー
+            else:
+                self.logger.error(
+                    "Error is not automatically recoverable")
+                self.pose[16] = 0
+                return False
+        except Exception as e_recover:
+            self.logger.error("Error during automatic recover")
+            self.logger.error(f"{self.format_error(e_recover)}")
+            self.pose[16] = 0
+            return False
+
     def control_loop_w_recover_automatic(self) -> bool:
         """自動復帰を含むリアルタイム制御ループ"""
         self.logger.info("Start Control Loop with Automatic Recover")
@@ -996,9 +1075,7 @@ class UR_CON:
                     self.logger.error(f"{self.format_error(e_leave)}")
                     # タイムアウトの場合はスレーブモードは切れているので
                     # 共有メモリを更新する
-                    if ((type(e_leave) is ORiNException and
-                        e_leave.hresult == HResult.E_TIMEOUT) or
-                        (type(e_leave) is not ORiNException)):
+                    if self.should_recover_automatic_on_error(e_leave):
                         self.pose[14] = 0
                     # それ以外は原因不明なのでループは抜ける
                     else:
@@ -1014,78 +1091,14 @@ class UR_CON:
                     return False
 
                 # タイムアウトの場合は接続からやり直す
-                if ((type(e) is ORiNException and
-                    e.hresult == HResult.E_TIMEOUT) or
-                   (type(e) is not ORiNException)):
-                        for i in range(1, 11):
-                            try:
-                                self.robot.start()
-                                self.robot.clear_error()
-
-                                # NOTE: タイムアウトした場合の数回に1回、
-                                # 制御権が取得できない場合がある。しかし、
-                                # このメソッドのこの例外から抜けた後に
-                                # GUIでClearError -> Enable -> StartMQTTControl
-                                # とすると制御権が取得できる。
-                                # ここで制御権を取得しても、GUIから制御権を取得しても
-                                # 内部的には同じ関数を呼んでいるので原因不明
-                                # (ソケットやbCAPClientのidが両者で同じことも確認済み)
-                                # 0. 元
-                                self.robot.take_arm()
-                                # 1. ここをイネーブルにしても変わらない
-                                # self.robot.enable_robot(ext_speed=speed_normal)
-                                # 2. manual_resetを追加しても変わらない
-                                # self.robot.manual_reset()
-                                # self.robot.take_arm()
-                                # 3. 待っても変わらない
-                                # time.sleep(5)
-                                # self.robot.take_arm()
-                                # time.sleep(5)
-
-                                self.find_and_setup_hand(self.tool_id)
-                                self.logger.info(
-                                    "Reconnected to robot successfully"
-                                    " after timeout")
-                                break
-                            except Exception as e_reconnect:
-                                self.logger.error(
-                                    "Error in reconnecting robot")
-                                self.logger.error(
-                                    f"{self.format_error(e_reconnect)}")
-                                if i == 10:
-                                    self.logger.error(
-                                        "Failed to reconnect robot after"
-                                        " 10 attempts")
-                                    self.pose[16] = 0
-                                    return False
-                            time.sleep(1)
-                # ここまでに接続ができている場合
-                try:
-                    errors = self.robot.get_cur_error_info_all()
-                    self.logger.error(f"Errors in teach pendant: {errors}")
-                    # 自動復帰可能エラー
-                    if self.robot.are_all_errors_stateless(errors):
-                        # 自動復帰を試行。失敗またはエラーの場合は通常モードに戻る。
-                        # エラー直後の自動復帰処理に失敗しても、
-                        # 同じ復帰処理を手動で行うと成功することもあるので
-                        # 手動で操作が可能な状態に戻す
-                        ret = self.robot.recover_automatic_enable()
-                        if not ret:
-                            raise ValueError(
-                                "Automatic recover failed in enable timeout")
-                        self.logger.info("Automatic recover succeeded")                    
-                    # 自動復帰不可能エラー
-                    else:
-                        self.logger.error(
-                            "Error is not automatically recoverable")
-                        self.pose[16] = 0
+                if self.should_recover_automatic_on_error(e):
+                    is_success = self.recover_automatic_on_timeout_error()
+                    if not is_success:
                         return False
-                except Exception as e_recover:
-                    self.logger.error("Error during automatic recover")
-                    self.logger.error(f"{self.format_error(e_recover)}")
-                    self.pose[16] = 0
+                # ここまでに接続ができている場合
+                is_success = self.recover_automatic_on_recoverable_error()
+                if not is_success:
                     return False
-
 
     def mqtt_control_loop(self) -> None:
         """MQTTによる制御ループ"""
