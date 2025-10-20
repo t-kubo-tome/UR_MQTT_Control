@@ -962,7 +962,7 @@ class UR_CON:
             time.sleep(0.008)
         self.pose[14] = 0
 
-    def should_recover_automatic_on_error(self, e_leave) -> bool:
+    def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
         # ロボット固有の処理を含む
         return ((type(e_leave) is ORiNException and
                  e_leave.hresult == HResult.E_TIMEOUT) or
@@ -1072,7 +1072,7 @@ class UR_CON:
                     self.logger.error(f"{self.format_error(e_leave)}")
                     # タイムアウトの場合はスレーブモードは切れているので
                     # 共有メモリを更新する
-                    if self.should_recover_automatic_on_error(e_leave):
+                    if self.should_recover_automatic_on_timeout_error(e_leave):
                         self.pose[14] = 0
                     # それ以外は原因不明なのでループは抜ける
                     else:
@@ -1088,7 +1088,7 @@ class UR_CON:
                     return False
 
                 # タイムアウトの場合は接続からやり直す
-                if self.should_recover_automatic_on_error(e):
+                if self.should_recover_automatic_on_timeout_error(e):
                     is_success = self.recover_automatic_on_timeout_error()
                     if not is_success:
                         self.pose[16] = 0
