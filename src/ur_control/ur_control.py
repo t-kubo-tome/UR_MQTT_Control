@@ -165,7 +165,7 @@ class UR_CON:
             self.find_and_setup_hand(tool_id)
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def get_hand_state(self):        
         # ハンドの状態値を取得して共有メモリに格納する
@@ -228,9 +228,12 @@ class UR_CON:
                 self.logger.info("Process real-time priority set to: %u" % rt_app_priority)
 
     def format_error(self, e: Exception) -> str:
-        s = "\n"
-        s = s + "Error trace: " + traceback.format_exc() + "\n"
-        return s
+        if isinstance(e, ORiNException):
+            return self.robot.format_error(e)
+        else:
+            s = "\n"
+            s = s + "Error trace: " + traceback.format_exc() + "\n"
+            return s
 
     def hand_control_loop(self, stop_event, error_event, lock, error_info):
         # ハンド固有の処理を含まない
@@ -836,7 +839,7 @@ class UR_CON:
                 e.hresult == HResult.E_TIMEOUT):
                 with lock:
                     error_info['kind'] = "robot"
-                    error_info['msg'] = self.robot.format_error(e)
+                    error_info['msg'] = self.format_error(e)
                     error_info['exception'] = e
                 error_event.set()
                 stop_event.set()
@@ -845,11 +848,11 @@ class UR_CON:
             if is_error_level_0:
                 self.logger.warning(
                     "Maybe trivial error in move_joint_servo")
-                self.logger.warning(f"{self.robot.format_error(e)}")
+                self.logger.warning(f"{self.format_error(e)}")
             else:
                 with lock:
                     error_info['kind'] = "robot"
-                    error_info['msg'] = self.robot.format_error(e)
+                    error_info['msg'] = self.format_error(e)
                     error_info['exception'] = e
                 error_event.set()
                 stop_event.set()
@@ -889,14 +892,14 @@ class UR_CON:
             self.robot.enable_robot(ext_speed=speed_normal)
         except Exception as e:
             self.logger.error("Error enabling robot")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def disable(self) -> None:
         try:
             self.robot.disable()
         except Exception as e:
             self.logger.error("Error disabling robot")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def set_area_enabled(self, enable: bool) -> None:
         try:
@@ -904,28 +907,28 @@ class UR_CON:
             self.pose[31] = int(enable)
         except Exception as e:
             self.logger.error("Error setting area enabled")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def tidy_pose(self) -> None:
         try:
             self.robot.move_joint_until_completion(self.tidy_joint)
         except Exception as e:
             self.logger.error("Error moving to tidy pose")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def move_joint(self, joints: List[float]) -> None:
         try:
             self.robot.move_joint_until_completion(joints)
         except Exception as e:
             self.logger.error("Error moving to specified joint")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def clear_error(self) -> None:
         try:
             self.robot.clear_error()
         except Exception as e:
             self.logger.error("Error clearing robot error")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def enter_servo_mode(self):
         # self.pose[14]は0のとき必ず通常モード。
@@ -972,7 +975,7 @@ class UR_CON:
                 # 自動復帰の前にエラーを確実にモニタするため待機
                 time.sleep(1)
                 self.logger.error("Error in control loop")
-                self.logger.error(f"{self.robot.format_error(e)}")
+                self.logger.error(f"{self.format_error(e)}")
 
                 # 目標値が状態値から大きく離れた場合は自動復帰しない
                 if str(e) == "Target and state are too different":
@@ -984,7 +987,7 @@ class UR_CON:
                     self.leave_servo_mode()
                 except Exception as e_leave:
                     self.logger.error("Error leaving servo mode")
-                    self.logger.error(f"{self.robot.format_error(e_leave)}")
+                    self.logger.error(f"{self.format_error(e_leave)}")
                     # タイムアウトの場合はスレーブモードは切れているので
                     # 共有メモリを更新する
                     if ((type(e_leave) is ORiNException and
@@ -1042,7 +1045,7 @@ class UR_CON:
                                 self.logger.error(
                                     "Error in reconnecting robot")
                                 self.logger.error(
-                                    f"{self.robot.format_error(e_reconnect)}")
+                                    f"{self.format_error(e_reconnect)}")
                                 if i == 10:
                                     self.logger.error(
                                         "Failed to reconnect robot after"
@@ -1073,7 +1076,7 @@ class UR_CON:
                         return False
                 except Exception as e_recover:
                     self.logger.error("Error during automatic recover")
-                    self.logger.error(f"{self.robot.format_error(e_recover)}")
+                    self.logger.error(f"{self.format_error(e_recover)}")
                     self.pose[16] = 0
                     return False
 
@@ -1109,7 +1112,7 @@ class UR_CON:
                         self.logger.info("Tool change succeeded")
                     except Exception as e:
                         self.logger.error("Error during tool change")
-                        self.logger.error(f"{self.robot.format_error(e)}")
+                        self.logger.error(f"{self.format_error(e)}")
                         self.pose[18] = 2
                         self.pose[17] = 0
                         break
@@ -1299,7 +1302,7 @@ class UR_CON:
                     self.pose[18] = 1
                 except Exception as e:
                     self.logger.error("Error during tool change")
-                    self.logger.error(f"{self.robot.format_error(e)}")
+                    self.logger.error(f"{self.format_error(e)}")
                     self.pose[18] = 2
                 finally:
                     self.pose[17] = 0
@@ -1311,14 +1314,14 @@ class UR_CON:
             self.robot.jog_joint(joint, direction)
         except Exception as e:
             self.logger.error("Error during joint jog")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def jog_tcp(self, axis: int, direction: float) -> None:
         try:
             self.robot.jog_tcp(axis, direction)
         except Exception as e:
             self.logger.error("Error during TCP jog")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
 
     def demo_put_down_box(self) -> None:
         """
@@ -1468,7 +1471,7 @@ class UR_CON:
             time.sleep(3)
         except Exception as e:
             self.logger.error("Error during demo put down box")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
             self.pose[22] = 2
         finally:
             self.pose[21] = 0
@@ -1842,7 +1845,7 @@ class UR_CON:
             self.pose[39] = 1
         except Exception as e:
             self.logger.error("Error during line cut")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.format_error(e)}")
             self.pose[39] = 2
         finally:
             self.pose[38] = 0
