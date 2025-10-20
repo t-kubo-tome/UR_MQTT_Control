@@ -1883,6 +1883,12 @@ class UR_CON:
         finally:
             self.pose[38] = 0
 
+    def del_robot(self) -> None:
+        # ロボット固有の処理を含む
+        if self.rtde_c is not None:
+            self.rtde_c.stopScript()
+        self.rtde_c = None
+
     def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
@@ -1940,6 +1946,7 @@ class UR_CON:
                 if wait:
                     control_pipe.send({"status": True})
             if self.pose[32] == 1:
+                self.del_robot()
                 self.sm.close()
                 self.control_to_archiver_queue.close()
                 time.sleep(1)
