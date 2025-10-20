@@ -295,6 +295,7 @@ class UR_CON:
 
     def control_loop(self, f: TextIO | None = None) -> bool:
         """リアルタイム制御ループ"""
+        # ロボット固有の処理を含まない
         self.enter_servo_mode()
         self.last = 0
         self.logger.info("Start Control Loop")
@@ -764,31 +765,10 @@ class UR_CON:
 
             if move_robot:
                 sw.lap("Send arm command")
-                try:
-                    self.robot.move_joint_servo(control.tolist())
-                except ORiNException as e:
-                    if (type(e) is ORiNException and
-                        e.hresult == HResult.E_TIMEOUT):
-                        with lock:
-                            error_info['kind'] = "robot"
-                            error_info['msg'] = self.robot.format_error(e)
-                            error_info['exception'] = e
-                        error_event.set()
-                        stop_event.set()
-                        break
-                    is_error_level_0 = self.robot.is_error_level_0(e)
-                    if is_error_level_0:
-                        self.logger.warning(
-                            "Maybe trivial error in move_joint_servo")
-                        self.logger.warning(f"{self.robot.format_error(e)}")
-                    else:
-                        with lock:
-                            error_info['kind'] = "robot"
-                            error_info['msg'] = self.robot.format_error(e)
-                            error_info['exception'] = e
-                        error_event.set()
-                        stop_event.set()
-                        break
+                success = self.move_joint_servo(
+                    control.tolist(), lock, error_info, error_event, stop_event)
+                if not success:
+                    break
 
                 if not use_hand_thread:
                     sw.lap("Send hand command")
@@ -807,7 +787,7 @@ class UR_CON:
             t_elapsed = time.time() - now
             t_wait = t_intv - t_elapsed
             if t_wait > 0:
-                if (move_robot and servo_mode == 0x102) or (not move_robot):
+                if self.should_wait_control_loop():
                     time.sleep(t_wait)
 
             sw.lap("Check elapsed after command")
@@ -818,13 +798,12 @@ class UR_CON:
                     f"{t_elapsed} seconds")
                 self.logger.warning(sw.summary())
 
+            self.control = control
             sw.stop()
             if stop:
-                # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
-                # ロボットを停止させてスレーブモードを解除可能な状態になる
-                if (control == self.last_control).all():
+                if self.is_ready_to_stop():
                     break
-                
+
             self.last_control = control
             self.last = now
  
@@ -839,6 +818,52 @@ class UR_CON:
             # TODO: これで例外発生元のスタックトレースが取得できればこれで十分
             raise error_info['exception']
         return True
+
+    def move_joint_servo(
+        self,
+        control: List[float],
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        # ロボット固有の処理を含む
+        try:
+            self.robot.move_joint_servo(control)
+        except ORiNException as e:
+            if (type(e) is ORiNException and
+                e.hresult == HResult.E_TIMEOUT):
+                with lock:
+                    error_info['kind'] = "robot"
+                    error_info['msg'] = self.robot.format_error(e)
+                    error_info['exception'] = e
+                error_event.set()
+                stop_event.set()
+                return False
+            is_error_level_0 = self.robot.is_error_level_0(e)
+            if is_error_level_0:
+                self.logger.warning(
+                    "Maybe trivial error in move_joint_servo")
+                self.logger.warning(f"{self.robot.format_error(e)}")
+            else:
+                with lock:
+                    error_info['kind'] = "robot"
+                    error_info['msg'] = self.robot.format_error(e)
+                    error_info['exception'] = e
+                error_event.set()
+                stop_event.set()
+                return False
+        return True
+
+    def should_wait_control_loop(self) -> bool:
+        # ロボット固有の処理を含む
+        return (move_robot and servo_mode == 0x102) or (not move_robot)
+
+    def is_ready_to_stop(self) -> bool:
+        # ロボット固有の処理を含む
+        # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
+        # ロボットを停止させてスレーブモードを解除可能な状態になる
+        return (self.control == self.last_control).all()
 
     def send_grip(self) -> None:
         if self.hand_name == "onrobot_2fg7":
