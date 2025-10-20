@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 # Robot shared modules
 from filter import SMAFilter
 from interpolate import DelayedInterpolator
+from ur_control.utils import deg2rad_list
 
 # Robot specific modules
 from rtde_control import RTDEControlInterface as RTDEControl
@@ -343,6 +344,7 @@ class UR_CON:
         while True:
             sw.start("Get shared memory")
             now = time.time()
+            self.on_step_start_in_control_loop()
 
             # TODO: これがメインスレッドを遅くしている可能性ありだが
             # この1行だけでとも思う。要検証
@@ -847,36 +849,52 @@ class UR_CON:
         stop_event,
     ) -> bool:
         # ロボット固有の処理を含む
-        try:
-            self.robot.move_joint_servo(control)
-        except ORiNException as e:
-            if (type(e) is ORiNException and
-                e.hresult == HResult.E_TIMEOUT):
-                with lock:
-                    error_info['kind'] = "robot"
-                    error_info['msg'] = self.format_error(e)
-                    error_info['exception'] = e
-                error_event.set()
-                stop_event.set()
-                return False
-            is_error_level_0 = self.robot.is_error_level_0(e)
-            if is_error_level_0:
-                self.logger.warning(
-                    "Maybe trivial error in move_joint_servo")
-                self.logger.warning(f"{self.format_error(e)}")
-            else:
-                with lock:
-                    error_info['kind'] = "robot"
-                    error_info['msg'] = self.format_error(e)
-                    error_info['exception'] = e
-                error_event.set()
-                stop_event.set()
-                return False
-        return True
+        # try:
+        #     self.robot.move_joint_servo(control)
+        # except ORiNException as e:
+        #     if (type(e) is ORiNException and
+        #         e.hresult == HResult.E_TIMEOUT):
+        #         with lock:
+        #             error_info['kind'] = "robot"
+        #             error_info['msg'] = self.format_error(e)
+        #             error_info['exception'] = e
+        #         error_event.set()
+        #         stop_event.set()
+        #         return False
+        #     is_error_level_0 = self.robot.is_error_level_0(e)
+        #     if is_error_level_0:
+        #         self.logger.warning(
+        #             "Maybe trivial error in move_joint_servo")
+        #         self.logger.warning(f"{self.format_error(e)}")
+        #     else:
+        #         with lock:
+        #             error_info['kind'] = "robot"
+        #             error_info['msg'] = self.format_error(e)
+        #             error_info['exception'] = e
+        #         error_event.set()
+        #         stop_event.set()
+        #         return False
+        # return True
+        # TODO: どのようにエラーを捕捉するか
+        is_success = self.rtde_c.servoJ(
+            deg2rad_list(control),
+            self.velocity,
+            self.acceleration,
+            self.dt,
+            self.lookahead_time,
+            self.gain,
+        )
+        self.rtde_c.waitPeriod(self.t_start)
+        return is_success
+
+    def on_step_start_in_control_loop(self) -> None:
+        # ロボット固有の処理を含む
+        self.t_start = self.rtde_c.initPeriod()
 
     def should_wait_control_loop(self) -> bool:
         # ロボット固有の処理を含む
-        return (move_robot and servo_mode == 0x102) or (not move_robot)
+        # move_robotのときはwaitPeriodで待つので不要
+        return not move_robot
 
     def is_ready_to_stop(self) -> bool:
         # ロボット固有の処理を含む
