@@ -150,6 +150,7 @@ class UR_CON:
         self.tidy_joint = default_joints["tidy"]
 
     def init_robot(self):
+        # ロボット固有の処理を含む
         try:
             # 500Hz is default of e-Series and UR-Series
             rtde_frequency = 500.0
@@ -157,6 +158,7 @@ class UR_CON:
             # URCap機能用のポート (デフォルト値)
             ur_cap_port = 50002
             rt_control_priority = 85
+            # エラーを送出する可能性あり
             self.rtde_c = RTDEControl(
                 ROBOT_IP,
                 rtde_frequency,
@@ -171,6 +173,13 @@ class UR_CON:
             # self.pose[31] = 1
             # tool_id = int(os.environ["TOOL_ID"])
             # self.find_and_setup_hand(tool_id)
+            # v and a is said to be not used in current version
+            self.velocity = 0.4
+            self.acceleration = 0.3
+            self.dt = 1.0 / rtde_frequency  # 2ms
+            # Value used in several examples
+            self.lookahead_time = 0.1
+            self.gain = 300
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
             self.logger.error(f"{self.format_error(e)}")
