@@ -228,12 +228,10 @@ class UR_CON:
                 self.logger.info("Process real-time priority set to: %u" % rt_app_priority)
 
     def format_error(self, e: Exception) -> str:
-        if isinstance(e, ORiNException):
-            return self.robot.format_error(e)
-        else:
-            s = "\n"
-            s = s + "Error trace: " + traceback.format_exc() + "\n"
-            return s
+        # URはロボット固有のエラーを創出しない
+        s = "\n"
+        s = s + "Error trace: " + traceback.format_exc() + "\n"
+        return s
 
     def hand_control_loop(self, stop_event, error_event, lock, error_info):
         # ハンド固有の処理を含まない
