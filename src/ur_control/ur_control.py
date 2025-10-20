@@ -77,7 +77,7 @@ n_windows *= int(0.008 / t_intv)
 reset_default_state = True
 default_joints = {
     # TCPが台の中心の上に来る初期位置
-    "tidy": [4.7031, -0.6618, 105.5149, 0.0001, 75.1440, 94.7100],
+    "tidy": [0.0, -90.0, -90.0, -90.0, 90.0, 0.0],
     # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
     "vr": [159.3784, 10.08485, 122.90902, 151.10866, -43.20116 + 90, 20.69275],
     # NOTE: 2025/04/18 19:25の新しい位置?VRとの対応がおかしい気がする
@@ -246,6 +246,7 @@ class UR_CON:
                 self.logger.info("Process real-time priority set to: %u" % rt_app_priority)
 
     def format_error(self, e: Exception) -> str:
+        # ロボット固有の処理を含む
         # URはロボット固有のエラーを創出しない
         s = "\n"
         s = s + "Error trace: " + traceback.format_exc() + "\n"
@@ -900,6 +901,7 @@ class UR_CON:
         # ロボット固有の処理を含む
         # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
         # ロボットを停止させてスレーブモードを解除可能な状態になる
+        # TODO: Cobottaには必要だがURに必要かは不明
         return (self.control == self.last_control).all()
 
     def send_grip(self) -> None:
@@ -943,25 +945,15 @@ class UR_CON:
             self.logger.error(f"{self.format_error(e)}")
 
     def tidy_pose(self) -> None:
-        try:
-            self.robot.move_joint_until_completion(self.tidy_joint)
-        except Exception as e:
-            self.logger.error("Error moving to tidy pose")
-            self.logger.error(f"{self.format_error(e)}")
+        is_success = self.rtde_c.moveJ(deg2rad_list(self.tidy_joint))
+        return is_success
 
     def move_joint(self, joints: List[float]) -> None:
-        try:
-            self.robot.move_joint_until_completion(joints)
-        except Exception as e:
-            self.logger.error("Error moving to specified joint")
-            self.logger.error(f"{self.format_error(e)}")
+        is_success = self.rtde_c.moveJ(deg2rad_list(joints))
+        return is_success
 
     def clear_error(self) -> None:
-        try:
-            self.robot.clear_error()
-        except Exception as e:
-            self.logger.error("Error clearing robot error")
-            self.logger.error(f"{self.format_error(e)}")
+        pass
 
     def enter_servo_mode(self):
         # self.pose[14]は0のとき必ず通常モード。
@@ -970,7 +962,6 @@ class UR_CON:
         # 順番固定
         with self.slave_mode_lock:
             self.pose[14] = 1
-        self.robot.enter_servo_mode()
         # スレーブモードになるまでis_in_servo_modeを使って待つと
         # 非常停止時に永久に待つ可能性があるので、固定時間だけ待つ
         # 万が一スレーブモードになっていなくても自動復帰のループで
@@ -982,88 +973,85 @@ class UR_CON:
         # self.pose[14]は1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
-        self.robot.leave_servo_mode()
-        while True:
-            if not self.robot.is_in_servo_mode():
-                break
-            time.sleep(0.008)
+        self.rtde_c.servoStop()
         self.pose[14] = 0
 
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
         # ロボット固有の処理を含む
-        return ((type(e_leave) is ORiNException and
-                 e_leave.hresult == HResult.E_TIMEOUT) or
-                 (type(e_leave) is not ORiNException))
+        return False
 
     def recover_automatic_on_timeout_error(self) -> bool:
-        # ロボット固有の処理を含む
-        for i in range(1, 11):
-            try:
-                self.robot.start()
-                self.robot.clear_error()
+        return False
+        # # ロボット固有の処理を含む
+        # for i in range(1, 11):
+        #     try:
+        #         self.robot.start()
+        #         self.robot.clear_error()
 
-                # NOTE: タイムアウトした場合の数回に1回、
-                # 制御権が取得できない場合がある。しかし、
-                # このメソッドのこの例外から抜けた後に
-                # GUIでClearError -> Enable -> StartMQTTControl
-                # とすると制御権が取得できる。
-                # ここで制御権を取得しても、GUIから制御権を取得しても
-                # 内部的には同じ関数を呼んでいるので原因不明
-                # (ソケットやbCAPClientのidが両者で同じことも確認済み)
-                # 0. 元
-                self.robot.take_arm()
-                # 1. ここをイネーブルにしても変わらない
-                # self.robot.enable_robot(ext_speed=speed_normal)
-                # 2. manual_resetを追加しても変わらない
-                # self.robot.manual_reset()
-                # self.robot.take_arm()
-                # 3. 待っても変わらない
-                # time.sleep(5)
-                # self.robot.take_arm()
-                # time.sleep(5)
+        #         # NOTE: タイムアウトした場合の数回に1回、
+        #         # 制御権が取得できない場合がある。しかし、
+        #         # このメソッドのこの例外から抜けた後に
+        #         # GUIでClearError -> Enable -> StartMQTTControl
+        #         # とすると制御権が取得できる。
+        #         # ここで制御権を取得しても、GUIから制御権を取得しても
+        #         # 内部的には同じ関数を呼んでいるので原因不明
+        #         # (ソケットやbCAPClientのidが両者で同じことも確認済み)
+        #         # 0. 元
+        #         self.robot.take_arm()
+        #         # 1. ここをイネーブルにしても変わらない
+        #         # self.robot.enable_robot(ext_speed=speed_normal)
+        #         # 2. manual_resetを追加しても変わらない
+        #         # self.robot.manual_reset()
+        #         # self.robot.take_arm()
+        #         # 3. 待っても変わらない
+        #         # time.sleep(5)
+        #         # self.robot.take_arm()
+        #         # time.sleep(5)
 
-                self.find_and_setup_hand(self.tool_id)
-                self.logger.info(
-                    "Reconnected to robot successfully"
-                    " after timeout")
-                return True
-            except Exception as e_reconnect:
-                self.logger.error(
-                    "Error in reconnecting robot")
-                self.logger.error(
-                    f"{self.format_error(e_reconnect)}")
-                if i == 10:
-                    self.logger.error(
-                        "Failed to reconnect robot after"
-                        " 10 attempts")
-                    return False
-            time.sleep(1)
+        #         self.find_and_setup_hand(self.tool_id)
+        #         self.logger.info(
+        #             "Reconnected to robot successfully"
+        #             " after timeout")
+        #         return True
+        #     except Exception as e_reconnect:
+        #         self.logger.error(
+        #             "Error in reconnecting robot")
+        #         self.logger.error(
+        #             f"{self.format_error(e_reconnect)}")
+        #         if i == 10:
+        #             self.logger.error(
+        #                 "Failed to reconnect robot after"
+        #                 " 10 attempts")
+        #             return False
+        #     time.sleep(1)
 
     def recover_automatic_on_recoverable_error(self) -> bool:
-        try:
-            errors = self.robot.get_cur_error_info_all()
-            self.logger.error(f"Errors in teach pendant: {errors}")
-            # 自動復帰可能エラー
-            if self.robot.are_all_errors_stateless(errors):
-                # 自動復帰を試行。失敗またはエラーの場合は通常モードに戻る。
-                # エラー直後の自動復帰処理に失敗しても、
-                # 同じ復帰処理を手動で行うと成功することもあるので
-                # 手動で操作が可能な状態に戻す
-                ret = self.robot.recover_automatic_enable()
-                if not ret:
-                    raise ValueError(
-                        "Automatic recover failed in enable timeout")
-                self.logger.info("Automatic recover succeeded")
-                return True
-            # 自動復帰不可能エラー
-            else:
-                self.logger.error(
-                    "Error is not automatically recoverable")
-                return False
-        except Exception as e_recover:
-            self.logger.error("Error during automatic recover")
-            self.logger.error(f"{self.format_error(e_recover)}")
-            return False
+        # TODO
+        return False
+        # try:
+        #     errors = self.robot.get_cur_error_info_all()
+        #     self.logger.error(f"Errors in teach pendant: {errors}")
+        #     # 自動復帰可能エラー
+        #     if self.robot.are_all_errors_stateless(errors):
+        #         # 自動復帰を試行。失敗またはエラーの場合は通常モードに戻る。
+        #         # エラー直後の自動復帰処理に失敗しても、
+        #         # 同じ復帰処理を手動で行うと成功することもあるので
+        #         # 手動で操作が可能な状態に戻す
+        #         ret = self.robot.recover_automatic_enable()
+        #         if not ret:
+        #             raise ValueError(
+        #                 "Automatic recover failed in enable timeout")
+        #         self.logger.info("Automatic recover succeeded")
+        #         return True
+        #     # 自動復帰不可能エラー
+        #     else:
+        #         self.logger.error(
+        #             "Error is not automatically recoverable")
+        #         return False
+        # except Exception as e_recover:
+        #     self.logger.error("Error during automatic recover")
+        #     self.logger.error(f"{self.format_error(e_recover)}")
+        #     return False
 
     def control_loop_w_recover_automatic(self) -> bool:
         """自動復帰を含むリアルタイム制御ループ"""
