@@ -1009,7 +1009,6 @@ class UR_CON:
                     self.logger.error(
                         "Failed to reconnect robot after"
                         " 10 attempts")
-                    self.pose[16] = 0
                     return False
             time.sleep(1)
 
@@ -1033,12 +1032,10 @@ class UR_CON:
             else:
                 self.logger.error(
                     "Error is not automatically recoverable")
-                self.pose[16] = 0
                 return False
         except Exception as e_recover:
             self.logger.error("Error during automatic recover")
             self.logger.error(f"{self.format_error(e_recover)}")
-            self.pose[16] = 0
             return False
 
     def control_loop_w_recover_automatic(self) -> bool:
@@ -1094,10 +1091,12 @@ class UR_CON:
                 if self.should_recover_automatic_on_error(e):
                     is_success = self.recover_automatic_on_timeout_error()
                     if not is_success:
+                        self.pose[16] = 0
                         return False
                 # ここまでに接続ができている場合
                 is_success = self.recover_automatic_on_recoverable_error()
                 if not is_success:
+                    self.pose[16] = 0
                     return False
 
     def mqtt_control_loop(self) -> None:
