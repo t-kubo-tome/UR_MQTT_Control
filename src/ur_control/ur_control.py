@@ -233,6 +233,7 @@ class UR_CON:
         return s
 
     def hand_control_loop(self, stop_event, error_event, lock, error_info):
+        # ハンド固有の処理を含まない
         self.logger.info("Start Hand Control Loop")
         last_tool_corrected = None
         t_intv_hand = 0.16
