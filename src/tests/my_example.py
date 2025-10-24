@@ -2,6 +2,7 @@ import psutil
 import os
 import sys
 import time
+import threading
 
 import numpy as np
 
@@ -9,6 +10,10 @@ from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
 # ur_rtde/src/rtde_python_bindings.cppから推定
 from dashboard_client import DashboardClient
+
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../ur_control')))
+from vacuumScripts import Vacuum_grip, Vacuum_release
 
 def deg2rad(deg):
     return deg * np.pi / 180.0
@@ -216,6 +221,26 @@ print(f"{rad2deg_list(rtde_r.getActualQ())=}")
 print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
 print(f"{rad2deg_list(rtde_r.getActualQ())=}")
 
+def send_grip():
+    t_start = time.time()
+    print(f"{rtde_c.sendCustomScript(Vacuum_grip)=}")
+    print(f"Time taken for Vacuum_grip: {time.time() - t_start} seconds")
+
+def send_release():
+    t_start = time.time()
+    print(f"{rtde_c.sendCustomScript(Vacuum_release)=}")
+    print(f"Time taken for Vacuum_release: {time.time() - t_start} seconds")
+
+threading.Thread(target=send_grip).start()
+time.sleep(5)
+threading.Thread(target=send_release).start()
+time.sleep(5)
+
+print(f"{rad2deg_list(rtde_r.getActualQ())=}")
+
+rtde_c.stopScript()
+sys.exit(0)
+
 # TCP移動
 pose = rtde_r.getActualTCPPose()
 # X, Y, Z, Rx, Ry, Rz
@@ -386,8 +411,8 @@ if True:
     # TODO: この方法で自動復帰できたが、もう少しスマートな方法があるかもしれない
     # TODO: rtde_c.moveJ(deg2rad_list(default_joints))=True
     print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
-    rtde_c.stopScript()
-    sys.exit(0)
+    # rtde_c.stopScript()
+    # sys.exit(0)
 
 ## サーボモード
 
