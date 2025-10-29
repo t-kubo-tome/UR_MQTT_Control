@@ -1037,8 +1037,9 @@ def gripper():
   status_checked = [-1,-1,-1,-1]
   current_speed = [-1,-1,-1,-1]
   current_force = [-1,-1,-1,-1]
-
+  write_output_integer_register(0, 1)
   rq_vacuum_release()
+  write_output_integer_register(0, 2)
 end
 """
 
@@ -2077,6 +2078,8 @@ def gripper():
   current_speed = [-1,-1,-1,-1]
   current_force = [-1,-1,-1,-1]
 
+  write_output_integer_register(0, 1)
   rq_vacuum_grip()
+  write_output_integer_register(0, 2)
 end
 """

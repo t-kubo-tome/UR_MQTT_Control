@@ -231,10 +231,12 @@ def send_release():
     print(f"{rtde_c.sendCustomScript(Vacuum_release)=}")
     print(f"Time taken for Vacuum_release: {time.time() - t_start} seconds")
 
-threading.Thread(target=send_grip).start()
-time.sleep(5)
-threading.Thread(target=send_release).start()
-time.sleep(5)
+thread = threading.Thread(target=send_grip)
+thread.start()
+thread.join()
+thread = threading.Thread(target=send_release)
+thread.start()
+thread.join()
 
 print(f"{rad2deg_list(rtde_r.getActualQ())=}")
 
