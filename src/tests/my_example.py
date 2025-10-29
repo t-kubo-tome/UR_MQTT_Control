@@ -8,6 +8,7 @@ import numpy as np
 
 from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
+from rtde_io import RTDEIOInterface as RTDEIO
 # ur_rtde/src/rtde_python_bindings.cppから推定
 from dashboard_client import DashboardClient
 
@@ -82,7 +83,11 @@ acceleration = 0.5
 rtde_frequency = 500.0
 dt = 1.0 / rtde_frequency  # 2ms
 # TODO: フラグの意味を調べる
-flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
+use_custom_script = True
+if use_custom_script:
+    flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_CUSTOM_SCRIPT | RTDEControl.FLAG_NO_WAIT
+else:
+    flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
 # The port used for the External URCap interface (default: 50002) 
 # RTDEは30004
 ur_cap_port = 50002  # default
@@ -117,6 +122,25 @@ rt_control_priority = 85
 # RTDE synchronization started
 # Segmentation fault
 rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+if use_custom_script:
+    # エラーが出る
+    # script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/ePick_control.script")
+    # エラーは出ないが動きはしない
+    script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/rtde_control_original.script")
+    if not os.path.exists(script_path):
+        raise FileNotFoundError(f"Custom script file not found: {script_path}")
+    from script_client import ScriptClient
+    # TODO: 詳細
+    rtde_sc = ScriptClient(robot_ip, 5, 17, 30003, True)
+    # TODO: ソースコードのpybind部分が引数をうけつけないバグになっている
+    rtde_sc.setScriptFile(script_path)
+    corrected_script = rtde_sc.getScript()
+    script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/rtde_control_original_corrected.script")
+    with open(script_path, "w") as f:
+        f.write(corrected_script)
+    rtde_c.setCustomScriptFile(script_path)
+    # hostname, verbose, use_upper_range_registers
+    rtde_io = RTDEIO(robot_ip, True, False)
 # hostname, frequency, variables, verbose, use_upper_range_registers, rt_priority
 # variables: A vector of variable names to be monitored (empty vector means use all default variables)
 # verbose: Enable verbose output for debugging purposes.
@@ -221,27 +245,28 @@ print(f"{rad2deg_list(rtde_r.getActualQ())=}")
 print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
 print(f"{rad2deg_list(rtde_r.getActualQ())=}")
 
-def send_grip():
-    t_start = time.time()
-    print(f"{rtde_c.sendCustomScript(Vacuum_grip)=}")
-    print(f"Time taken for Vacuum_grip: {time.time() - t_start} seconds")
+if False:
+    def send_grip():
+        t_start = time.time()
+        print(f"{rtde_c.sendCustomScript(Vacuum_grip)=}")
+        print(f"Time taken for Vacuum_grip: {time.time() - t_start} seconds")
 
-def send_release():
-    t_start = time.time()
-    print(f"{rtde_c.sendCustomScript(Vacuum_release)=}")
-    print(f"Time taken for Vacuum_release: {time.time() - t_start} seconds")
+    def send_release():
+        t_start = time.time()
+        print(f"{rtde_c.sendCustomScript(Vacuum_release)=}")
+        print(f"Time taken for Vacuum_release: {time.time() - t_start} seconds")
 
-thread = threading.Thread(target=send_grip)
-thread.start()
-thread.join()
-thread = threading.Thread(target=send_release)
-thread.start()
-thread.join()
+    thread = threading.Thread(target=send_grip)
+    thread.start()
+    thread.join()
+    thread = threading.Thread(target=send_release)
+    thread.start()
+    thread.join()
 
-print(f"{rad2deg_list(rtde_r.getActualQ())=}")
+    print(f"{rad2deg_list(rtde_r.getActualQ())=}")
 
-rtde_c.stopScript()
-sys.exit(0)
+    rtde_c.stopScript()
+    sys.exit(0)
 
 # TCP移動
 pose = rtde_r.getActualTCPPose()
@@ -264,7 +289,7 @@ print(f"{rtde_r.getActualTCPPose()=}")
 print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
 
 # TODO: 限界まで動かしてみる
-if True:
+if False:
     # ひじ特異姿勢になり、途中で止まってしまい以下の出力が得られる。処理は以降も継続するが
     # ROBOT_MODE_POWER_OFF、IS_FAULT、IS_STOPPED_DUE_TO_SAFETYとなる
     # IS_PROTECTIVE_STOPPEDではないことに注意
@@ -443,6 +468,10 @@ for i in range(1000):
     # NOTE: the function is to be used in combination with the initPeriod().
     # dtとrtde_frequencyは厳密には一緒じゃなくても可能
     rtde_c.waitPeriod(t_start)
+    if i % 200 == 0:
+        print(f"{rtde_io.setInputIntRegister(18, 1)=}")
+    elif (i + 100) % 200 == 0:
+        print(f"{rtde_io.setInputIntRegister(18, 2)=}")
 
 # 無いと、
 # TPで、Another thread is already controlling the robot
