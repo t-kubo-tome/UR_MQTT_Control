@@ -83,7 +83,7 @@ acceleration = 0.5
 rtde_frequency = 500.0
 dt = 1.0 / rtde_frequency  # 2ms
 # TODO: フラグの意味を調べる
-use_custom_script = True
+use_custom_script = False
 if use_custom_script:
     flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_CUSTOM_SCRIPT | RTDEControl.FLAG_NO_WAIT
 else:
@@ -129,18 +129,18 @@ if use_custom_script:
     script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/rtde_control_original.script")
     if not os.path.exists(script_path):
         raise FileNotFoundError(f"Custom script file not found: {script_path}")
-    from script_client import ScriptClient
-    # TODO: 詳細
-    rtde_sc = ScriptClient(robot_ip, 5, 17, 30003, True)
-    # TODO: ソースコードのpybind部分が引数をうけつけないバグになっている
-    rtde_sc.setScriptFile(script_path)
-    corrected_script = rtde_sc.getScript()
-    script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/rtde_control_original_corrected.script")
-    with open(script_path, "w") as f:
-        f.write(corrected_script)
+    # from script_client import ScriptClient
+    # # TODO: 詳細
+    # rtde_sc = ScriptClient(robot_ip, 5, 17, 30003, True)
+    # # TODO: ソースコードのpybind部分が引数をうけつけないバグになっている
+    # rtde_sc.setScriptFile(script_path)
+    # corrected_script = rtde_sc.getScript()
+    # script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/rtde_control_original_corrected.script")
+    # with open(script_path, "w") as f:
+    #     f.write(corrected_script)
     rtde_c.setCustomScriptFile(script_path)
-    # hostname, verbose, use_upper_range_registers
-    rtde_io = RTDEIO(robot_ip, True, False)
+# hostname, verbose, use_upper_range_registers
+rtde_io = RTDEIO(robot_ip, True, False)
 # hostname, frequency, variables, verbose, use_upper_range_registers, rt_priority
 # variables: A vector of variable names to be monitored (empty vector means use all default variables)
 # verbose: Enable verbose output for debugging purposes.
@@ -472,6 +472,8 @@ for i in range(1000):
         print(f"{rtde_io.setInputIntRegister(18, 1)=}")
     elif (i + 100) % 200 == 0:
         print(f"{rtde_io.setInputIntRegister(18, 2)=}")
+    else:
+        print(f"{rtde_io.setInputIntRegister(18, 0)=}")
 
 # 無いと、
 # TPで、Another thread is already controlling the robot
