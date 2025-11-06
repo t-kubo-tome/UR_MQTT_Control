@@ -29,7 +29,6 @@ def rad2deg_list(rad_list):
     return [rad2deg(rad) for rad in rad_list]
 
 def parse_safety_status_bits(safety_status):
-    safety_status = rtde_r.getSafetyStatusBits()
     IS_NORMAL_MODE = (safety_status & (1 << 0)) != 0
     IS_REDUCED_MODE = (safety_status & (1 << 1)) != 0
     IS_PROTECTIVE_STOPPED = (safety_status & (1 << 2)) != 0
@@ -69,6 +68,28 @@ def parse_robot_mode(robot_mode):
     }
     print(f"parsed_robot_mode={robot_modes[robot_mode]}")
 
+def rtde_d_batch_monitor():
+    print(f"{rtde_d.isConnected()=}")
+    print(f"{rtde_d.isInRemoteControl()=}")
+    print(f"{rtde_d.safetystatus()=}")
+    print(f"{rtde_d.programState()=}")
+    print(f"{rtde_d.robotmode()=}")
+
+def rtde_r_batch_monitor():
+    print(f"{rtde_r.isConnected()=}")
+    print(f"{rtde_r.getSafetyStatusBits()=}")
+    parse_safety_status_bits(rtde_r.getSafetyStatusBits())
+    print(f"{rtde_r.getRobotMode()=}")
+    parse_robot_mode(rtde_r.getRobotMode())
+    print(f"{rtde_r.getRobotStatus()=}")
+    print(f"{rtde_r.isProtectiveStopped()=}")
+    print(f"{rtde_r.isEmergencyStopped()=}")
+    # Generalized forces in the TCP
+    print(f"{rtde_r.getActualTCPForce()=}")
+    # Get the raw force and torque measurement, not compensated for forces and torques caused by the payload.
+    print(f"{rtde_r.getFtRawWrench()=}")
+    print(f"{rad2deg_list(rtde_r.getActualQ())=}")
+    print(f"{rtde_r.getActualTCPPose()=}")
 
 ## Parameters
 
