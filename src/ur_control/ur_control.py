@@ -26,6 +26,7 @@ from ur_control.utils import deg2rad_list
 
 # Robot specific modules
 from rtde_control import RTDEControlInterface as RTDEControl
+from rtde_io import RTDEIOInterface as RTDEIO
 from ur_control.config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
 from ur_control.tools import tool_infos, tool_classes, tool_base
 
@@ -153,12 +154,49 @@ class UR_CON:
     def init_robot(self):
         # ロボット固有の処理を含む
         try:
+            # ダッシュボード接続
+            rtde_d = DashboardClient(robot_ip, dashboard_port, verbose)
+            # 接続。タイムアウト時エラー
+            rtde_d.connect(2000)
+            # リモートコントロールモードでなければティーチペンダントから操作が必要
+            if not rtde_d.isInRemoteControl():
+                raise ValueError(
+                    "Please switch to Remote Control mode on the teach pendant.")
+            # 自動での制御可能状態への移行は実装する
+            # 電源ON。TPのRobot StatusがRobot Active以上なら何もしないので気軽に呼び出して良い
+            # 非同期処理。
+            rtde_d.powerOn()
+            # ブレーキ解除。TPのRobot StatusがRobot in Normal Mode以上なら
+            # 何もしないので気軽に呼び出して良い
+            # 非同期処理。
+            rtde_d.brakeRelease()
+            # 制御可能状態になるまで時間がかかるので待機
+            t_start = time.time()
+            while True:
+                robotmode = rtde_d.robotmode()
+                if robotmode == "Robotmode: RUNNING":
+                    break
+                time.sleep(1)
+                if time.time() - t_start > 15:
+                    raise TimeoutError(
+                        "Failed to reach ready-to-control state within 15 seconds.")
+
             # 500Hz is default of e-Series and UR-Series
             rtde_frequency = 500.0
+            # ロボットコントローラ側で実行され、PC側からのコマンドを受け付ける制御ループを
+            # 含むプログラムは、スクリプトに記述される。FLAG_UPLOAD_SCRIPTは、PC側の
+            # ur_rtdeライブラリのscripts/rtde_control.scriptを
+            # ロボットコントローラ側に加工してアップロードし実行する。
+            # このスクリプトを編集するのが最も簡単。
+            # FLAG_USE_EXT_UR_CAPは、ティーチペンダント側の操作が必要で煩雑。
+            # FLAG_CUSTOM_SCRIPTは、ur_rtde==1.6.2では、アップロード時の加工を
+            # 自分で行う必要があるので煩雑
             flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
             # URCap機能用のポート (デフォルト値)
             ur_cap_port = 50002
+            # 制御タスクの優先度。例では受信タスクより優位になっている
             rt_control_priority = 85
+            # 制御クライアントの作成
             # エラーを送出する可能性あり
             self.rtde_c = RTDEControl(
                 ROBOT_IP,
@@ -167,14 +205,9 @@ class UR_CON:
                 ur_cap_port,
                 rt_control_priority,
             )
-            # TODO: URに以下のような設定が必要なら追加
-            # self.robot.clear_error()
-            # self.robot.take_arm()
-            # self.robot.SetAreaEnabled(0, True)
-            # self.pose[31] = 1
-            # tool_id = int(os.environ["TOOL_ID"])
-            # self.find_and_setup_hand(tool_id)
-            # v and a is said to be not used in current version
+            # ハンド制御用IOクライアントの作成
+            # 引数はhostname, verbose, use_upper_range_registers
+            self.rtde_io = RTDEIO(ROBOT_IP, True, False)
             self.velocity = 0.4
             self.acceleration = 0.3
             self.dt = 1.0 / rtde_frequency  # 2ms
@@ -905,22 +938,10 @@ class UR_CON:
         return (self.control == self.last_control).all()
 
     def send_grip(self) -> None:
-        if self.hand_name == "onrobot_2fg7":
-            # NOTE: 呼ぶ度に目標の把持力は変更できるので
-            # VRコントローラーからの入力で動的に把持力を
-            # 変えることもできる (どういう仕組みを作るかは別)
-            self.hand.grip(waiting=False)
-        elif self.hand_name == "onrobot_vgc10":
-            self.hand.grip(waiting=False, vacuumA=80,  vacuumB=80)
-    
+        self.rtde_io.setInputIntRegister(18, 1)
+
     def send_release(self) -> None:
-        if self.hand_name == "onrobot_2fg7":
-            # NOTE: 呼ぶ度に目標の把持力は変更できるので
-            # VRコントローラーからの入力で動的に把持力を
-            # 変えることもできる (どういう仕組みを作るかは別)
-            self.hand.release(waiting=False)
-        elif self.hand_name == "onrobot_vgc10":
-            self.hand.release(waiting=False)
+        self.rtde_io.setInputIntRegister(18, 2)
 
     def enable(self) -> None:
         try:

@@ -4,92 +4,46 @@ import sys
 import time
 import threading
 
-import numpy as np
-
 from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
 from rtde_io import RTDEIOInterface as RTDEIO
-# ur_rtde/src/rtde_python_bindings.cppから推定
 from dashboard_client import DashboardClient
+
+from utils import (
+    deg2rad,
+    deg2rad_list,
+    rad2deg,
+    rad2deg_list,
+    parse_safety_status_bits,
+    parse_robot_mode,
+    rtde_c_batch_monitor,
+    rtde_d_batch_monitor,
+    rtde_r_batch_monitor,
+    set_real_time_priority,
+)
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../ur_control')))
 from vacuumScripts import Vacuum_grip, Vacuum_release
 
-def deg2rad(deg):
-    return deg * np.pi / 180.0
 
-def deg2rad_list(deg_list):
-    return [deg2rad(deg) for deg in deg_list]
+def print_parse_safety_status_bits(safety_status):
+    ret = parse_safety_status_bits(safety_status)
+    print(f"IS_NORMAL_MODE={ret['IS_NORMAL_MODE']}")
+    print(f"IS_REDUCED_MODE={ret['IS_REDUCED_MODE']}")
+    print(f"IS_PROTECTIVE_STOPPED={ret['IS_PROTECTIVE_STOPPED']}")
+    print(f"IS_RECOVERY_MODE={ret['IS_RECOVERY_MODE']}")
+    print(f"IS_SAFEGUARD_STOPPED={ret['IS_SAFEGUARD_STOPPED']}")
+    print(f"IS_SYSTEM_EMERGENCY_STOPPED={ret['IS_SYSTEM_EMERGENCY_STOPPED']}")
+    print(f"IS_ROBOT_EMERGENCY_STOPPED={ret['IS_ROBOT_EMERGENCY_STOPPED']}")
+    print(f"IS_EMERGENCY_STOPPED={ret['IS_EMERGENCY_STOPPED']}")
+    print(f"IS_VIOLATION={ret['IS_VIOLATION']}")
+    print(f"IS_FAULT={ret['IS_FAULT']}")
+    print(f"IS_STOPPED_DUE_TO_SAFETY={ret['IS_STOPPED_DUE_TO_SAFETY']}")
 
-def rad2deg(rad):
-    return rad * 180.0 / np.pi
 
-def rad2deg_list(rad_list):
-    return [rad2deg(rad) for rad in rad_list]
-
-def parse_safety_status_bits(safety_status):
-    IS_NORMAL_MODE = (safety_status & (1 << 0)) != 0
-    IS_REDUCED_MODE = (safety_status & (1 << 1)) != 0
-    IS_PROTECTIVE_STOPPED = (safety_status & (1 << 2)) != 0
-    IS_RECOVERY_MODE = (safety_status & (1 << 3)) != 0
-    IS_SAFEGUARD_STOPPED = (safety_status & (1 << 4)) != 0
-    IS_SYSTEM_EMERGENCY_STOPPED = (safety_status & (1 << 5)) != 0
-    IS_ROBOT_EMERGENCY_STOPPED = (safety_status & (1 << 6)) != 0
-    IS_EMERGENCY_STOPPED = (safety_status & (1 << 7)) != 0
-    IS_VIOLATION = (safety_status & (1 << 8)) != 0
-    IS_FAULT = (safety_status & (1 << 9)) != 0
-    IS_STOPPED_DUE_TO_SAFETY = (safety_status & (1 << 10)) != 0
-    print(f"{IS_NORMAL_MODE=}")
-    print(f"{IS_REDUCED_MODE=}")
-    print(f"{IS_PROTECTIVE_STOPPED=}")
-    print(f"{IS_RECOVERY_MODE=}")
-    print(f"{IS_SAFEGUARD_STOPPED=}")
-    print(f"{IS_SYSTEM_EMERGENCY_STOPPED=}")
-    print(f"{IS_ROBOT_EMERGENCY_STOPPED=}")
-    print(f"{IS_EMERGENCY_STOPPED=}")
-    print(f"{IS_VIOLATION=}")
-    print(f"{IS_FAULT=}")
-    print(f"{IS_STOPPED_DUE_TO_SAFETY=}")
-
-def parse_robot_mode(robot_mode):
-    # 排他的なモードになっていると思われる
-    robot_modes = {
-        -1: "ROBOT_MODE_NO_CONTROLLER",
-        0: "ROBOT_MODE_DISCONNECTED",
-        1: "ROBOT_MODE_CONFIRM_SAFETY",
-        2: "ROBOT_MODE_BOOTING",
-        3: "ROBOT_MODE_POWER_OFF",
-        4: "ROBOT_MODE_POWER_ON",
-        5: "ROBOT_MODE_IDLE",
-        6: "ROBOT_MODE_BACKDRIVE",
-        7: "ROBOT_MODE_RUNNING",
-        8: "ROBOT_MODE_UPDATING_FIRMWARE",
-    }
-    print(f"parsed_robot_mode={robot_modes[robot_mode]}")
-
-def rtde_d_batch_monitor():
-    print(f"{rtde_d.isConnected()=}")
-    print(f"{rtde_d.isInRemoteControl()=}")
-    print(f"{rtde_d.safetystatus()=}")
-    print(f"{rtde_d.programState()=}")
-    print(f"{rtde_d.robotmode()=}")
-
-def rtde_r_batch_monitor():
-    print(f"{rtde_r.isConnected()=}")
-    print(f"{rtde_r.getSafetyStatusBits()=}")
-    parse_safety_status_bits(rtde_r.getSafetyStatusBits())
-    print(f"{rtde_r.getRobotMode()=}")
-    parse_robot_mode(rtde_r.getRobotMode())
-    print(f"{rtde_r.getRobotStatus()=}")
-    print(f"{rtde_r.isProtectiveStopped()=}")
-    print(f"{rtde_r.isEmergencyStopped()=}")
-    # Generalized forces in the TCP
-    print(f"{rtde_r.getActualTCPForce()=}")
-    # Get the raw force and torque measurement, not compensated for forces and torques caused by the payload.
-    print(f"{rtde_r.getFtRawWrench()=}")
-    print(f"{rad2deg_list(rtde_r.getActualQ())=}")
-    print(f"{rtde_r.getActualTCPPose()=}")
+def print_parse_robot_mode(robot_mode):
+    print(f"parsed_robot_mode={parse_robot_mode(robot_mode)}")
 
 ## Parameters
 
@@ -103,7 +57,6 @@ acceleration = 0.5
 # -1.0 means use the robot’s default frequency, 500Hz for e-Series and UR-Series, while its 125Hz for the CB-series
 rtde_frequency = 500.0
 dt = 1.0 / rtde_frequency  # 2ms
-# TODO: フラグの意味を調べる
 use_custom_script = False
 if use_custom_script:
     flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_CUSTOM_SCRIPT | RTDEControl.FLAG_NO_WAIT
@@ -119,6 +72,9 @@ gain = 300
 # controlが相対的にreceiveより優位なのには意味がある
 rt_receive_priority = 90
 rt_control_priority = 85
+verbose = True
+use_upper_range_registers = False
+dashboard_port = 29999
 
 # hostname, frequency, flags, ur_cap_port, rt_priority
 # 結構頻繁に偶発的に
@@ -142,7 +98,21 @@ rt_control_priority = 85
 # Waiting for RTDE data synchronization to start...
 # RTDE synchronization started
 # Segmentation fault
-rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+max_trials = 3
+trial = 0
+while True:
+    try:
+        rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+        break
+    except Exception as e:
+        print(f"Exception during RTDEControl initialization: {e}")
+        print("Retrying in 2 seconds...")
+        time.sleep(2)
+        trial += 1
+        if trial >= max_trials:
+            print("Max trials reached. Exiting.")
+            sys.exit(1)
+
 if use_custom_script:
     # エラーが出る
     # script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/ePick_control.script")
@@ -161,20 +131,22 @@ if use_custom_script:
     #     f.write(corrected_script)
     rtde_c.setCustomScriptFile(script_path)
 # hostname, verbose, use_upper_range_registers
-rtde_io = RTDEIO(robot_ip, True, False)
+rtde_io = RTDEIO(robot_ip, verbose, use_upper_range_registers)
 # hostname, frequency, variables, verbose, use_upper_range_registers, rt_priority
 # variables: A vector of variable names to be monitored (empty vector means use all default variables)
 # verbose: Enable verbose output for debugging purposes.
 # use_upper_range_registers: ? realtime_control_example.pyではFalse
-rtde_r = RTDEReceive(robot_ip, rtde_frequency, [], True, False, rt_receive_priority)
+rtde_r = RTDEReceive(robot_ip, rtde_frequency, [], verbose, use_upper_range_registers, rt_receive_priority)
 
-# TODO
 # hostname, port, verbose
-verbose = True
-rtde_d = DashboardClient(robot_ip, 29999, verbose)
-# TODO: タイムアウトした場合の挙動は
+rtde_d = DashboardClient(robot_ip, dashboard_port, verbose)
+# 初期化時点では接続されない。connectではじめて接続される
 # timeout_ms
 rtde_d.connect(2000)
+# 意図的にポートを変えるとエラーを送出する
+# rtde_d = DashboardClient(robot_ip, 50000, verbose)
+# RuntimeError: Timeout connecting to UR dashboard server.
+# rtde_d.connect(2000)
 # rtde_d.isConnected()=True
 print(f"{rtde_d.isConnected()=}")
 # rtde_d.isConnected()=False
@@ -232,19 +204,7 @@ print(f"{rtde_d.isInRemoteControl()=}")
 
 # この順番で指定する
 # Set application real-time priority
-os_used = sys.platform
-process = psutil.Process(os.getpid())
-if os_used == "win32":  # Windows (either 32-bit or 64-bit)
-    process.nice(psutil.REALTIME_PRIORITY_CLASS)
-elif os_used == "linux":  # linux
-    rt_app_priority = 80
-    param = os.sched_param(rt_app_priority)
-    try:
-        os.sched_setscheduler(0, os.SCHED_FIFO, param)
-    except OSError:
-        print("Failed to set real-time process scheduler to %u, priority %u" % (os.SCHED_FIFO, rt_app_priority))
-    else:
-        print("Process real-time priority set to: %u" % rt_app_priority)
+set_real_time_priority()
 
 # 現在の作業台でのデフォルト姿勢
 default_joints = [0.0, -90.0, -90.0, -90.0, 90.0, 0.0]
@@ -309,7 +269,6 @@ print(f"{rtde_c.moveL(pose)=}")
 print(f"{rtde_r.getActualTCPPose()=}")
 print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
 
-# TODO: 限界まで動かしてみる
 if False:
     # ひじ特異姿勢になり、途中で止まってしまい以下の出力が得られる。処理は以降も継続するが
     # ROBOT_MODE_POWER_OFF、IS_FAULT、IS_STOPPED_DUE_TO_SAFETYとなる
@@ -344,26 +303,29 @@ if False:
     # rtde_r.getActualTCPPose()=[0.4924559063506938, -0.13288871284280165, 0.4838238083626931, 2.221603472340064, -2.2209961733083947, -5.609133893831176e-05]
     print(f"{rtde_r.getActualTCPPose()=}")
     time.sleep(1)
-    # rtde_d.safetystatus()='Safetystatus: FAULT'
-    print(f"{rtde_d.safetystatus()=}")
-    # rtde_d.programState()='STOPPED <unnamed>'
-    print(f"{rtde_d.programState()=}")
-    # rtde_d.robotmode()='Robotmode: POWER_OFF'
-    print(f"{rtde_d.robotmode()=}")
-    # IS_NORMAL_MODE=False
-    # IS_REDUCED_MODE=False
-    # IS_PROTECTIVE_STOPPED=False
-    # IS_RECOVERY_MODE=False
-    # IS_SAFEGUARD_STOPPED=False
-    # IS_SYSTEM_EMERGENCY_STOPPED=False
-    # IS_ROBOT_EMERGENCY_STOPPED=False
-    # IS_EMERGENCY_STOPPED=False
-    # IS_VIOLATION=False
-    # IS_FAULT=True
-    # IS_STOPPED_DUE_TO_SAFETY=True
-    parse_safety_status_bits(rtde_r.getSafetyStatusBits())
-    # parsed_robot_mode=ROBOT_MODE_POWER_OFF
-    parse_robot_mode(rtde_r.getRobotMode())
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
+    # # rtde_d.safetystatus()='Safetystatus: FAULT'
+    # print(f"{rtde_d.safetystatus()=}")
+    # # rtde_d.programState()='STOPPED <unnamed>'
+    # print(f"{rtde_d.programState()=}")
+    # # rtde_d.robotmode()='Robotmode: POWER_OFF'
+    # print(f"{rtde_d.robotmode()=}")
+    # # IS_NORMAL_MODE=False
+    # # IS_REDUCED_MODE=False
+    # # IS_PROTECTIVE_STOPPED=False
+    # # IS_RECOVERY_MODE=False
+    # # IS_SAFEGUARD_STOPPED=False
+    # # IS_SYSTEM_EMERGENCY_STOPPED=False
+    # # IS_ROBOT_EMERGENCY_STOPPED=False
+    # # IS_EMERGENCY_STOPPED=False
+    # # IS_VIOLATION=False
+    # # IS_FAULT=True
+    # # IS_STOPPED_DUE_TO_SAFETY=True
+    # print_parse_safety_status_bits(rtde_r.getSafetyStatusBits())
+    # # parsed_robot_mode=ROBOT_MODE_POWER_OFF
+    # print_parse_robot_mode(rtde_r.getRobotMode())
     # TODO: Popupを閉じるのはいいがちゃんとPopupの情報を保存したい
     # TODO: どれを選ぶ?上ほど対象範囲が広い? -> そうではない
     # Closes the popup.
@@ -384,8 +346,17 @@ if False:
     #     It is highly recommended to check the error log before using 
     #     this command (either via PolyScope or e.g. ssh connection).
     # かなり時間を空ければ自動復帰できる
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
     time.sleep(10)
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
     print(f"{rtde_d.restartSafety()=}")
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
     # RTDEReceiveInterface Exception: RTDEControlInterface: Could not receive data from robot...
     # RTDEControlInterface Exception: Operation canceledOperation canceled
 
@@ -402,19 +373,21 @@ if False:
         time.sleep(1)
         try:
             print(f"{rtde_r.reconnect()=}")
+            print("Reconnect in loop")
         except Exception as e:
             print(f"Exception during rtde_r.reconnect(): {e}")
     while not rtde_c.isConnected():
         time.sleep(1)
         try:
             print(f"{rtde_c.reconnect()=}")
+            print("Reconnect in loop")
         except Exception as e:
             print(f"Exception during rtde_c.reconnect(): {e}")
     print(f"{rtde_d.powerOn()=}")
-    time.sleep(10)
+    # time.sleep(10)
     # RTDEControlInterface Exception: ur_rtde: Failed to start control script, before timeout of 5 seconds
     print(f"{rtde_d.brakeRelease()=}")
-    time.sleep(10)
+    time.sleep(15)
     # IS_NORMAL_MODE=True
     # IS_REDUCED_MODE=False
     # IS_PROTECTIVE_STOPPED=False
@@ -426,10 +399,10 @@ if False:
     # IS_VIOLATION=False
     # IS_FAULT=False
     # IS_STOPPED_DUE_TO_SAFETY=False
-    parse_safety_status_bits(rtde_r.getSafetyStatusBits())
+    print_parse_safety_status_bits(rtde_r.getSafetyStatusBits())
     # ここで既にRUNNINGになっているが、control scriptがnot running
     # parsed_robot_mode=ROBOT_MODE_RUNNING
-    parse_robot_mode(rtde_r.getRobotMode())
+    print_parse_robot_mode(rtde_r.getRobotMode())
     # ここでは既にconnectされている
     while not rtde_c.isConnected():
         time.sleep(1)
@@ -437,6 +410,7 @@ if False:
             print(f"{rtde_c.reconnect()=}")
         except Exception as e:
             print(f"Exception during rtde_c.reconnect(): {e}")
+    print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
     rtde_c.stopScript()
     del rtde_c
     import gc
@@ -458,9 +432,66 @@ if False:
     time.sleep(10)
     # TODO: この方法で自動復帰できたが、もう少しスマートな方法があるかもしれない
     # TODO: rtde_c.moveJ(deg2rad_list(default_joints))=True
+    # なさそう
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
     print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
     # rtde_c.stopScript()
     # sys.exit(0)
+
+## Protective Stopの場合
+if False:
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
+
+    # Triggers a protective stop on the robot. Can be used for testing and debugging.
+    print(f"{rtde_c.triggerProtectiveStop()=}")
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
+
+    time.sleep(10)
+    # print(f"{rtde_d.closePopup()=}")
+    # print(f"{rtde_d.closeSafetyPopup()=}")
+    # ｌ接続できない
+    print(f"{rtde_d.unlockProtectiveStop()=}")
+    # print(f"{rtde_d.restartSafety()=}")
+
+    time.sleep(5)
+
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
+
+    print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
+
+    rtde_c.stopScript()
+    del rtde_c
+    import gc
+    gc.collect()
+    # time.sleep(10)
+    # こうすれば接続できる
+    rtde_c = None
+    while True:
+        if rtde_c is None or not rtde_c.isConnected():
+            try:
+                rtde_c = RTDEControl(robot_ip, rtde_frequency, flags, ur_cap_port, rt_control_priority)
+            except Exception as e:
+                print(f"Exception during RTDEControl re-initialization: {e}")
+                time.sleep(1)
+        else:
+            break
+    print(rtde_c_batch_monitor(rtde_c))
+    print(rtde_d_batch_monitor(rtde_d))
+    print(rtde_r_batch_monitor(rtde_r))
+
+    print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
+
+
+    rtde_c.stopScript()
+    sys.exit(0)
 
 ## サーボモード
 
@@ -468,41 +499,52 @@ if False:
 joint_q = default_joints.copy()
 print(f"{rtde_c.moveJ(deg2rad_list(joint_q))=}")
 
-# Execute 500Hz control loop for 2 seconds, each cycle is 2ms
-# 合計45度回転させる
-for i in range(1000):
-    # This function is used in combination with waitPeriod() and is used to get the start of a control period / cycle. 
-    t_start = rtde_c.initPeriod()
-    # Servo to position (linear in joint-space)
-    # Parameters:
-    #         q – joint positions [rad]
-    #         speed – NOT used in current version
-    #         acceleration – NOT used in current version
-    #         time – time where the command is controlling the robot. The function is blocking for time t [S]
-    #         lookahead_time – time [S], range [0.03,0.2] smoothens the trajectory with this lookahead time
-    #         gain – proportional gain for following target position, range [100,2000]
-    # あまりlookahead_time, gainを変えてもわからなそう
-    rtde_c.servoJ(deg2rad_list(joint_q), velocity, acceleration, dt, lookahead_time, gain)
-    joint_q[0] += 0.045
-    joint_q[5] += 0.045
-    # Used for waiting the rest of the control period, set implicitly as dt = 1 / frequency. 
-    # NOTE: the function is to be used in combination with the initPeriod().
-    # dtとrtde_frequencyは厳密には一緒じゃなくても可能
-    rtde_c.waitPeriod(t_start)
-    if i % 200 == 0:
-        print(f"{rtde_io.setInputIntRegister(18, 1)=}")
-    elif (i + 100) % 200 == 0:
-        print(f"{rtde_io.setInputIntRegister(18, 2)=}")
-    else:
-        print(f"{rtde_io.setInputIntRegister(18, 0)=}")
+rtde_io.setInputIntRegister(18, 1)
+# 0.01では駄目だった
+time.sleep(0.1)
+rtde_io.setInputIntRegister(18, 0)
+time.sleep(5)
+rtde_io.setInputIntRegister(18, 2)
+time.sleep(0.1)
+rtde_io.setInputIntRegister(18, 0)
+time.sleep(5)
 
-# 無いと、
-# TPで、Another thread is already controlling the robot
-# 標準出力で、RTDEControlInterface: RTDE control script is not running!
-# となる（プログラム側はしたがって例外は発生しない）
-# Stop servo mode and decelerate the robot.
-# a – rate of deceleration of the tool [m/s^2]
-rtde_c.servoStop()
+if False:
+    # Execute 500Hz control loop for 2 seconds, each cycle is 2ms
+    # 合計45度回転させる
+    for i in range(1000):
+        # This function is used in combination with waitPeriod() and is used to get the start of a control period / cycle. 
+        t_start = rtde_c.initPeriod()
+        # Servo to position (linear in joint-space)
+        # Parameters:
+        #         q – joint positions [rad]
+        #         speed – NOT used in current version
+        #         acceleration – NOT used in current version
+        #         time – time where the command is controlling the robot. The function is blocking for time t [S]
+        #         lookahead_time – time [S], range [0.03,0.2] smoothens the trajectory with this lookahead time
+        #         gain – proportional gain for following target position, range [100,2000]
+        # あまりlookahead_time, gainを変えてもわからなそう
+        rtde_c.servoJ(deg2rad_list(joint_q), velocity, acceleration, dt, lookahead_time, gain)
+        joint_q[0] += 0.045
+        joint_q[5] += 0.045
+        # Used for waiting the rest of the control period, set implicitly as dt = 1 / frequency. 
+        # NOTE: the function is to be used in combination with the initPeriod().
+        # dtとrtde_frequencyは厳密には一緒じゃなくても可能
+        rtde_c.waitPeriod(t_start)
+        if i % 200 == 0:
+            print(f"{rtde_io.setInputIntRegister(18, 1)=}")
+        elif (i + 100) % 200 == 0:
+            print(f"{rtde_io.setInputIntRegister(18, 2)=}")
+        else:
+            print(f"{rtde_io.setInputIntRegister(18, 0)=}")
+
+    # 無いと、
+    # TPで、Another thread is already controlling the robot
+    # 標準出力で、RTDEControlInterface: RTDE control script is not running!
+    # となる（プログラム側はしたがって例外は発生しない）
+    # Stop servo mode and decelerate the robot.
+    # a – rate of deceleration of the tool [m/s^2]
+    rtde_c.servoStop()
 
 # Receive側のループ例
 for i in range(5):
@@ -524,7 +566,7 @@ print(f"{rtde_c.isJointsWithinSafetyLimits(deg2rad_list(default_joints))=}")
 
 robot_mode = rtde_r.getRobotMode()
 # parsed_robot_mode=ROBOT_MODE_RUNNING
-parse_robot_mode(robot_mode)
+print_parse_robot_mode(robot_mode)
 
 safety_status = rtde_r.getSafetyStatusBits()
 # IS_NORMAL_MODE=True
@@ -538,7 +580,7 @@ safety_status = rtde_r.getSafetyStatusBits()
 # IS_VIOLATION=False
 # IS_FAULT=False
 # IS_STOPPED_DUE_TO_SAFETY=False
-parse_safety_status_bits(safety_status)
+print_parse_safety_status_bits(safety_status)
 
 # rtde_r.isProtectiveStopped()=False
 print(f"{rtde_r.isProtectiveStopped()=}")
