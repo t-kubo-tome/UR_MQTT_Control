@@ -149,7 +149,8 @@ class MQTTWin:
         self.button["DemoPutDownBox"] = tk.Button(self.root, text="DemoPutDownBox", padx=5,
                        command=self.DemoPutDownBox, state="disabled")
         self.button["DemoPutDownBox"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
-
+        self.button["DemoPutDownBox"].grid_remove()
+        
         self.button["DisconnectMQTT"] = tk.Button(self.root, text="DisconnectMQTT", padx=5,
                        command=self.DisconnectMQTT, state="disabled")
         # self.button["DisconnectMQTT"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
@@ -158,6 +159,7 @@ class MQTTWin:
                       command=self.ToolChange, state="disabled")
         self.button["ToolChange"].grid(
             row=row,column=6,padx=2,pady=2,sticky="ew", columnspan=2)
+        self.button["ToolChange"].grid_remove()
 
         self.frame_is_emergency_stopped = tk.Frame(self.root)
         self.frame_is_emergency_stopped.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
@@ -187,6 +189,7 @@ class MQTTWin:
         self.button["LineCut"] = tk.Button(self.root, text="LineCut", padx=5,
                       command=self.LineCut, state="disabled")
         self.button["LineCut"].grid(row=row,column=6,padx=2,pady=2,sticky="ew", columnspan=2)
+        self.button["LineCut"].grid_remove()
 
         self.frame_enabled = tk.Frame(self.root)
         self.frame_enabled.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
@@ -204,6 +207,7 @@ class MQTTWin:
         self.button["SetAreaEnabled"] = tk.Button(self.root, text="SetAreaEnabled", padx=5,
                       command=self.SetArea, state="disabled")
         self.button["SetAreaEnabled"].grid(row=row,column=0,padx=2,pady=2,sticky="ew", columnspan=2)
+        self.button["SetAreaEnabled"].grid_remove()
 
         self.button["TidyPose"] = tk.Button(self.root, text="TidyPose", padx=5,
                       command=self.TidyPose, state="disabled")
@@ -936,13 +940,14 @@ if __name__ == '__main__':
     # ファイルの情報が正確かいまのところ保証できないので、指定してもらう
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--tool-id",
-        type=int,
-        required=True,
-        choices=tool_ids,
-        help="現在ロボットに付いているツールのID",
-    )
+    # NOTE: URでは現状1つのツールに対応
+    # parser.add_argument(
+    #     "--tool-id",
+    #     type=int,
+    #     required=True,
+    #     choices=tool_ids,
+    #     help="現在ロボットに付いているツールのID",
+    # )
     parser.add_argument(
         "--use-joint-monitor-plot",
         action="store_true",
@@ -953,7 +958,9 @@ if __name__ == '__main__':
     import os
     # HACK: コードの変化を少なくするため、
     # ロボット制御プロセスに引数で渡すのではなく環境変数で渡す
-    os.environ["TOOL_ID"] = str(kwargs.pop("tool_id"))
+    # os.environ["TOOL_ID"] = str(kwargs.pop("tool_id"))
+    # NOTE: 現状URではツールIDは1固定
+    os.environ["TOOL_ID"] = "1"
 
     root = tk.Tk()
     mqwin = MQTTWin(root, **kwargs)
