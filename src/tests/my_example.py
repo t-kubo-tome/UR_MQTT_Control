@@ -253,7 +253,10 @@ if False:
 pose = rtde_r.getActualTCPPose()
 # X, Y, Z, Rx, Ry, Rz
 # 単位はmとrad
+# ツールのTCP位置をTPのInstallationに登録した場合
 # [0.492758731909551, -0.1328801058413286, 0.19206447671314636, -2.2212006216673545, 2.2207765897624494, -0.00123055083415886]
+# 登録しない場合
+# [0.492452086206032, -0.13287208068971268, 0.4880439642897617, -2.2212206768130365, 2.220815840844321, -0.001218890328266665]
 print(f"{rtde_r.getActualTCPPose()=}")
 # Zを10cm上げる
 pose[2] += 0.1
@@ -412,6 +415,7 @@ if False:
             print(f"Exception during rtde_c.reconnect(): {e}")
     print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
     rtde_c.stopScript()
+    # rtde_c.disconnect()
     del rtde_c
     import gc
     gc.collect()
