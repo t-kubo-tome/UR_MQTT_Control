@@ -1,6 +1,5 @@
-from ur_control.dummy_hand_control import DummyHandControl
-from ur_control.twofg_control import TWOFGControl
-from ur_control.vgc10_control import VGC10Control
+from dummy_hand_control import DummyHandControl
+
 
 # ホルダーの座標系は、ベース座標系（ツール座標系ではない）であることに注意
 tool_infos = [

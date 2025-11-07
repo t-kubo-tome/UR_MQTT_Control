@@ -22,15 +22,15 @@ from dotenv import load_dotenv
 # Robot shared modules
 from filter import SMAFilter
 from interpolate import DelayedInterpolator
-from ur_control.utils import deg2rad_list, rtde_d_batch_monitor
+from utils import deg2rad_list, rtde_d_batch_monitor
 
 # Robot specific modules
 from dashboard_client import DashboardClient
 from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_io import RTDEIOInterface as RTDEIO
 
-from ur_control.config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
-from ur_control.tools import tool_infos, tool_classes, tool_base
+from config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
+from tools import tool_infos, tool_classes, tool_base
 
 
 # パラメータ

@@ -19,12 +19,12 @@ import numpy as np
 
 from dotenv import load_dotenv
 
-from ur_control.config import SHM_NAME, SHM_SIZE, T_INTV
-from ur_control.tools import tool_infos, tool_classes
-from ur_control.utils import rad2deg_list, rtde_r_batch_monitor_status_only
+from config import SHM_NAME, SHM_SIZE, T_INTV
+from tools import tool_infos, tool_classes
+from utils import rad2deg_list, rtde_r_batch_monitor_status_only
 
 # Robot specific modules
-from ur_control.ur_robot import RobotMode
+from ur_robot import RobotMode
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
 
 

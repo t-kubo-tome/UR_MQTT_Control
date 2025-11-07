@@ -10,8 +10,8 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import Optional
 
-from ur_control.ur_mqtt_control import ProcessManager
-from ur_control.tools import tool_infos
+from ur.ur_mqtt_control import ProcessManager
+from ur.tools import tool_infos
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]

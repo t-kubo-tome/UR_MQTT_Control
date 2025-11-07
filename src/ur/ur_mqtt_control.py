@@ -19,7 +19,7 @@ import uuid
 
 package_dir = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(package_dir)
-from ur_control.config import SHM_NAME, SHM_SIZE
+from config import SHM_NAME, SHM_SIZE
 from ur_control import UR_CON, UR_CON_Archiver
 from ur_monitor import UR_MON
 from ur_monitor_gui import run_joint_monitor_gui
