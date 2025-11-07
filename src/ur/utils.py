@@ -176,3 +176,29 @@ def rtde_c_batch_monitor(rtde_c):
     return {
         "isConnected": rtde_c.isConnected(),
     }
+
+
+def pose_m_rad_to_mm_deg(pose: list[float]) -> list[float]:
+    # RTDEのTCP姿勢はメートル・ラジアン単位なので、ミリ・度単位に変換する
+    converted = [
+        pose[0] * 1000.0,
+        pose[1] * 1000.0,
+        pose[2] * 1000.0,
+        rad2deg(pose[3]),
+        rad2deg(pose[4]),
+        rad2deg(pose[5]),
+    ]
+    return converted
+
+
+def pose_mm_deg_to_m_rad(pose: list[float]) -> list[float]:
+    # ミリ・度単位のTCP姿勢をRTDEのメートル・ラジアン単位に変換する
+    converted = [
+        pose[0] / 1000.0,
+        pose[1] / 1000.0,
+        pose[2] / 1000.0,
+        deg2rad(pose[3]),
+        deg2rad(pose[4]),
+        deg2rad(pose[5]),
+    ]
+    return converted

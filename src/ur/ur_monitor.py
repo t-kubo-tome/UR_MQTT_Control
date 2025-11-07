@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 from config import SHM_NAME, SHM_SIZE, T_INTV
 from tools import tool_infos, tool_classes
-from utils import rad2deg_list, rtde_r_batch_monitor_status_only
+from utils import parse_robot_status, pose_m_rad_to_mm_deg, rad2deg_list, rtde_r_batch_monitor_status_only
 
 # Robot specific modules
 from ur_robot import RobotMode
@@ -51,7 +51,7 @@ class LoopResult(Enum):
 
 class UR_MON:
     def __init__(self):
-        pass
+        self.rtde_r: RTDEReceive | None = None
 
     def format_error(self, e: Exception) -> str:
         return str(e)
@@ -61,14 +61,17 @@ class UR_MON:
         rtde_frequency = round(1 / T_INTV)
         # 例ではrt_control_priority (85) の方がreceiveより優位に設定しているため従う
         rt_receive_priority = 90
-        self.rtde_r = RTDEReceive(
-            ROBOT_IP,
-            rtde_frequency,
-            [],  # variables to be monitored (empty for all)
-            True,  # verbose output for debugging
-            False,  # use_upper_range_registers, 詳細不明だが例ではFalse
-            rt_receive_priority,
-        )
+        if self.rtde_r is None:
+            self.rtde_r = RTDEReceive(
+                ROBOT_IP,
+                rtde_frequency,
+                [],  # variables to be monitored (empty for all)
+                True,  # verbose output for debugging
+                False,  # use_upper_range_registers, 詳細不明だが例ではFalse
+                rt_receive_priority,
+            )
+        if not self.rtde_r.isConnected():
+            self.rtde_r.reconnect()
         tool_id = int(os.environ["TOOL_ID"])
         self.find_and_setup_hand(tool_id)
 
@@ -182,6 +185,7 @@ class UR_MON:
         last_is_in_servo_mode = None
         last_is_emergency_stopped = None
         last_info = None
+        last_health_check = 0
         while True:
             # ログファイル変更時
             if self.pose[34] == 1:
@@ -192,6 +196,12 @@ class UR_MON:
                 last = now
             if last_error_monitored == 0:
                 last_error_monitored = now
+            if last_health_check == 0:
+                last_health_check = now
+            
+            if last_health_check + 5 < now:
+                last_health_check = now
+                self.logger.info("Health check: Robot monitor is running")
 
             if not self.rtde_r.isConnected():
                 return LoopResult.NOT_CONNECTED
@@ -268,7 +278,8 @@ class UR_MON:
             try:
                 # TODO: ツール座標系によって異なる値が出るがツール座標系はどう指定するか
                 # 単位はmとrad
-                actual_tcp_pose = self.rtde_r.getActualTCPPose()
+                actual_tcp_pose = pose_m_rad_to_mm_deg(
+                    self.rtde_r.getActualTCPPose())
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
                 # self.reconnect_after_timeout(e)
@@ -286,7 +297,7 @@ class UR_MON:
                     joints = ['j1','j2','j3','j4','j5','j6']
                     actual_joint_js.update({
                         k: v for k, v in zip(joints, actual_joint)})
-                elif MQTT_FORMAT == 'Denso-UR-Control-IK':
+                elif MQTT_FORMAT == 'UR-Control-IK':
                     # 7要素送る必要があるのでダミーの[0]を追加
                     actual_joint_js.update({"joints": list(actual_joint) + [0]})
                     # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
@@ -295,8 +306,8 @@ class UR_MON:
                     # NOTE(20250604): 一時的な対応。VR側で修正され次第削除。
                     # actual_joint_js["joints"][0] = actual_joint_js["joints"][0] + 180
                 else:
-                    raise ValueError
-            
+                    raise ValueError("Unknown MQTT_FORMAT")
+
             # 型: 整数、単位: ms
             time_ms = int(now * 1000)
             actual_joint_js["time"] = time_ms
@@ -360,22 +371,30 @@ class UR_MON:
 
             is_emergency_stopped = False
             error = {}
-            # TODO: どういうエラーが出るかはやってみないとわからなそう
-            # try:
-            #     errors = []
-            # except Exception as e:
-            #     self.logger.error(f"{self.format_error(e)}")
-            #     # self.reconnect_after_timeout(e)
-            #     errors = []
-            # # 制御プロセスのエラー検出と方法が違うので、
-            # # 直後は状態プロセスでエラーが検出されないことがある
-            # # その場合は次のループに検出を持ち越す
-            # if len(errors) > 0:
-            #     error = {"errors": errors}
-            #     # 自動復帰可能エラー
-            #     auto_recoverable = \
-            #         self.robot.are_all_errors_stateless(errors)
-            #     error["auto_recoverable"] = auto_recoverable
+            try:
+                # プログラムが動いていない場合はエラーを取得しない、これが最も安定なサイン
+                # TODO: 詳細なエラーが取得できるかは要検討
+                getRobotStatus = self.rtde_r.getRobotStatus()
+                getRobotStatus_parsed = parse_robot_status(getRobotStatus)
+                is_program_running = getRobotStatus_parsed["IS_PROGRAM_RUNNING"]
+                if not is_program_running:
+                    errors = [{"error_code": 0, "error_message": "No program running"}]
+                else:
+                    errors = []
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
+                errors = []
+            # 制御プロセスのエラー検出と方法が違うので、
+            # 直後は状態プロセスでエラーが検出されないことがある
+            # その場合は次のループに検出を持ち越す
+            if len(errors) > 0:
+                error = {"errors": errors}
+                # 自動復帰可能エラー
+                # NOTE: 1度自動復帰するのでTrueとしているがURの自動復帰の方法によっては定義
+                # が変わりFalseになるかもしれない
+                auto_recoverable = True
+                error["auto_recoverable"] = auto_recoverable
             try:
                 is_emergency_stopped = self.rtde_r.isEmergencyStopped()
             except Exception as e:
@@ -405,6 +424,10 @@ class UR_MON:
             if actual_joint is not None:
                 self.pose[:len(actual_joint)] = actual_joint
                 self.pose[19] = 1
+
+            if actual_tcp_pose is not None:
+                self.pose[42:48] = actual_tcp_pose
+                self.pose[48] = 1
 
             if now-last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
                 jss = json.dumps(actual_joint_js)

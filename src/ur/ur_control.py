@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 # Robot shared modules
 from filter import SMAFilter
 from interpolate import DelayedInterpolator
-from utils import deg2rad_list, rtde_d_batch_monitor
+from utils import deg2rad_list, pose_mm_deg_to_m_rad, rtde_d_batch_monitor
 
 # Robot specific modules
 from dashboard_client import DashboardClient
@@ -153,6 +153,8 @@ class UR_CON:
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
         self.rtde_c: RTDEControl | None = None
+        self.rtde_d: DashboardClient | None = None
+        self.rtde_io: RTDEIO | None = None
 
     def init_robot(self):
         # ロボット固有の処理を含む
@@ -160,16 +162,23 @@ class UR_CON:
             dashboard_port = 29999
             verbose = True
             # ダッシュボード接続
-            self.rtde_d = DashboardClient(ROBOT_IP, dashboard_port, verbose)
-            # 接続。タイムアウト時エラー
-            self.rtde_d.connect(2000)
+            if self.rtde_d is None:
+                self.rtde_d = DashboardClient(ROBOT_IP, dashboard_port, verbose)
+            if not self.rtde_d.isConnected():
+                # 接続。タイムアウト時エラー
+                self.rtde_d.connect(2000)
             # リモートコントロールモードでなければティーチペンダントから操作が必要
             if not self.rtde_d.isInRemoteControl():
                 raise ValueError(
                     "Please switch to Remote Control mode on the teach pendant.")
             # ハンド制御用IOクライアントの作成
-            # 引数はhostname, verbose, use_upper_range_registers
-            self.rtde_io = RTDEIO(ROBOT_IP, True, False)
+            if self.rtde_io is None:
+                # 引数はhostname, verbose, use_upper_range_registers
+                self.rtde_io = RTDEIO(ROBOT_IP, True, False)
+            else:
+                # こう書くしか無い
+                self.rtde_io.disconnect()
+                self.rtde_io.reconnect()  
             self.velocity = 0.4
             self.acceleration = 0.3
             self.dt = T_INTV
@@ -903,6 +912,7 @@ class UR_CON:
         self.rtde_io.setInputIntRegister(18, 0)
 
     def enable(self) -> bool:
+        self.logger.info("Enabling robot")
         try:
             # 自動での制御可能状態への移行は実装する
             # 電源ON。TPのRobot StatusがRobot Active以上なら何もしないので気軽に呼び出して良い
@@ -1009,7 +1019,22 @@ class UR_CON:
             self.logger.error(f"{self.format_error(e)}")
 
     def clear_error(self) -> None:
-        pass
+        try:
+            self.logger.info("Clearing errors started")
+            errors = rtde_d_batch_monitor(self.rtde_d)
+            # triggerProtectiveStopの検証必要
+            self.logger.info(f"Errors in teach pendant: {errors}")
+            # self.rtde_d.closePopup()
+            safetystatus = errors["safetystatus"].split(": ")[-1]
+            if safetystatus == "FAULT":
+                self.rtde_d.closeSafetyPopup()
+                self.rtde_d.restartSafety()
+            # self.rtde_d.unlockProtectiveStop()
+            self.logger.info(
+                "Clearing errors finished. Please enable the robot if use.")
+        except Exception as e:
+            self.logger.error("Error clearing robot error")
+            self.logger.error(f"{self.format_error(e)}")        
 
     def enter_servo_mode(self):
         # self.pose[14]は0のとき必ず通常モード。
@@ -1356,14 +1381,33 @@ class UR_CON:
 
     def jog_joint(self, joint: int, direction: float) -> None:
         try:
-            self.robot.jog_joint(joint, direction)
+            if self.pose[19] != 1:
+                raise ValueError("Joint jog requires joint state to be monitored but currently not")
+            # joint state
+            joints = self.pose[:6].copy()
+            joints = np.asarray(joints)
+            joints[joint] += direction
+            joints = joints.tolist()
+            is_success = self.rtde_c.moveJ(deg2rad_list(joints))
+            if not is_success:
+                raise ValueError("moveJ failed")
         except Exception as e:
             self.logger.error("Error during joint jog")
             self.logger.error(f"{self.format_error(e)}")
 
     def jog_tcp(self, axis: int, direction: float) -> None:
         try:
-            self.robot.jog_tcp(axis, direction)
+            if self.pose[48] != 1:
+                raise ValueError("TCP jog requires TCP state to be monitored but currently not")
+            # TCP state
+            poses = self.pose[42:48].copy()
+            poses = np.asarray(poses)
+            poses[axis] += direction
+            poses = poses.tolist()
+            poses = pose_mm_deg_to_m_rad(poses)
+            is_success = self.rtde_c.moveL(poses)
+            if not is_success:
+                raise ValueError("moveL failed")
         except Exception as e:
             self.logger.error("Error during TCP jog")
             self.logger.error(f"{self.format_error(e)}")
@@ -1899,7 +1943,14 @@ class UR_CON:
         # ロボット固有の処理を含む
         if self.rtde_c is not None:
             self.rtde_c.stopScript()
-        self.rtde_c = None
+            self.rtde_c.disconnect()
+            self.rtde_c = None
+        if self.rtde_d is not None:
+            self.rtde_d.disconnect()
+            self.rtde_d = None
+        if self.rtde_io is not None:
+            self.rtde_io.disconnect()
+            self.rtde_io = None
 
     def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue):
         self.setup_logger(log_queue)
@@ -1923,6 +1974,7 @@ class UR_CON:
                 elif command["command"] == "set_area_enabled":
                     self.set_area_enabled(**command["params"])
                 elif command["command"] == "tidy_pose":
+                    self.logger.info("Tidy pose")
                     self.tidy_pose()
                 elif command["command"] == "release_hand":
                     self.logger.info("Release hand")

@@ -264,6 +264,8 @@ class ProcessManager:
         # [39]: カッター移動の完了状態。0: 未定義。1: 成功。2: 失敗
         # [40]: ハンドの把持力。
         # [41]: ツールチェンジなど後の制御可能フラグ。0: 制御不可。1: 制御可能
+        # [42:48]: TCP姿勢
+        # [48]: TCP姿勢受信フラグ。0: 未受信。1: 受信済み
         self.ar = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf) # 共有メモリ上の Array
         self.ar[:] = 0
         self.manager = multiprocessing.Manager()
