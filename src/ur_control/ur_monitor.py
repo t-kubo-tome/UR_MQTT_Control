@@ -1,5 +1,6 @@
 # UR の状態をモニタリングする
 
+from enum import auto, Enum
 import logging
 from typing import Any, Dict, List, TextIO
 from paho.mqtt import client as mqtt
@@ -20,7 +21,7 @@ from dotenv import load_dotenv
 
 from ur_control.config import SHM_NAME, SHM_SIZE, T_INTV
 from ur_control.tools import tool_infos, tool_classes
-from ur_control.utils import rad2deg_list
+from ur_control.utils import rad2deg_list, rtde_r_batch_monitor_status_only
 
 # Robot specific modules
 from ur_control.ur_robot import RobotMode
@@ -42,16 +43,22 @@ SAVE = os.getenv("SAVE", "true") == "true"
 save_state = SAVE
 
 
+class LoopResult(Enum):
+    NOT_CONNECTED = auto()
+    INTERRUPTED = auto()
+    LOG_FILE_CHANGED = auto()
+
+
 class UR_MON:
     def __init__(self):
         pass
 
     def format_error(self, e: Exception) -> str:
-        return self.robot.format_error(e)
+        return str(e)
 
     def init_robot(self):
         # ロボット固有の処理を含む
-        rtde_frequency = 500.0
+        rtde_frequency = round(1 / T_INTV)
         # 例ではrt_control_priority (85) の方がreceiveより優位に設定しているため従う
         rt_receive_priority = 90
         self.rtde_r = RTDEReceive(
@@ -62,11 +69,8 @@ class UR_MON:
             False,  # use_upper_range_registers, 詳細不明だが例ではFalse
             rt_receive_priority,
         )
-        # TODO: Cobottaのこれらに相当する処理はURで必要か
-        # self.robot.start()
-        # self.robot.clear_error()
-        # tool_id = int(os.environ["TOOL_ID"])
-        # self.find_and_setup_hand(tool_id)
+        tool_id = int(os.environ["TOOL_ID"])
+        self.find_and_setup_hand(tool_id)
 
     def find_and_setup_hand(self, tool_id):
         # ロボット固有の処理を含む
@@ -83,6 +87,17 @@ class UR_MON:
         self.hand_name = name
         self.hand = hand
         self.tool_id = tool_id
+
+    def reconnect_robot(self):
+        self.logger.info("Reconnect robot")
+        self.rtde_r.reconnect()
+        self.find_and_setup_hand(self.tool_id)
+
+    def disconnect_robot(self):
+        self.logger.info("Disconnect robot")
+        self.rtde_r.disconnect()
+        if self.hand is not None:
+            self.hand.disconnect()
 
     def reconnect_after_timeout(self, e: Exception) -> bool:
         # TODO
@@ -158,7 +173,7 @@ class UR_MON:
         return [tool_info for tool_info in tool_infos
                 if tool_info["id"] == tool_id][0]
 
-    def monitor_start(self, f: TextIO | None = None):
+    def monitor_start(self, f: TextIO | None = None) -> LoopResult:
         # ロボット固有の処理を含む
         last = 0
         last_error_monitored = 0
@@ -166,16 +181,20 @@ class UR_MON:
         is_put_down_box = False
         last_is_in_servo_mode = None
         last_is_emergency_stopped = None
+        last_info = None
         while True:
             # ログファイル変更時
             if self.pose[34] == 1:
-                return True
+                return LoopResult.LOG_FILE_CHANGED
 
             now = time.time()
             if last == 0:
                 last = now
             if last_error_monitored == 0:
                 last_error_monitored = now
+
+            if not self.rtde_r.isConnected():
+                return LoopResult.NOT_CONNECTED
 
             actual_joint_js = {}
 
@@ -247,6 +266,7 @@ class UR_MON:
             # TODO: どう失敗するかはやってみないとわからなそう
             # TCP姿勢
             try:
+                # TODO: ツール座標系によって異なる値が出るがツール座標系はどう指定するか
                 # 単位はmとrad
                 actual_tcp_pose = self.rtde_r.getActualTCPPose()
             except Exception as e:
@@ -313,8 +333,7 @@ class UR_MON:
             # モータがONか
             try:
                 robot_mode = self.rtde_r.getRobotMode()
-                enabled = robot_mode in (
-                    RobotMode.ROBOT_MODE_IDLE, RobotMode.ROBOT_MODE_RUNNING)
+                enabled = robot_mode == RobotMode.ROBOT_MODE_RUNNING
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
                 # self.reconnect_after_timeout(e)
@@ -341,32 +360,27 @@ class UR_MON:
 
             is_emergency_stopped = False
             error = {}
-            # スレーブモード中にエラー情報や非常停止状態を取得しようとすると、
-            # スレーブモードが切断される。
-            # 制御プロセスでスレーブモードを前提とした処理をしている間 (lock中) は、
-            # エラー情報や非常停止状態を取得しないようにする。
-            with self.slave_mode_lock:
-                if self.pose[14] == 0:
-                    try:
-                        errors = self.robot.get_cur_error_info_all()
-                    except Exception as e:
-                        self.logger.error(f"{self.format_error(e)}")
-                        # self.reconnect_after_timeout(e)
-                        errors = []
-                    # 制御プロセスのエラー検出と方法が違うので、
-                    # 直後は状態プロセスでエラーが検出されないことがある
-                    # その場合は次のループに検出を持ち越す
-                    if len(errors) > 0:
-                        error = {"errors": errors}
-                        # 自動復帰可能エラー
-                        auto_recoverable = \
-                            self.robot.are_all_errors_stateless(errors)
-                        error["auto_recoverable"] = auto_recoverable
-                    try:
-                        is_emergency_stopped = self.rtde_r.isEmergencyStopped()
-                    except Exception as e:
-                        self.logger.error(f"{self.format_error(e)}")
-                        # self.reconnect_after_timeout(e)
+            # TODO: どういうエラーが出るかはやってみないとわからなそう
+            # try:
+            #     errors = []
+            # except Exception as e:
+            #     self.logger.error(f"{self.format_error(e)}")
+            #     # self.reconnect_after_timeout(e)
+            #     errors = []
+            # # 制御プロセスのエラー検出と方法が違うので、
+            # # 直後は状態プロセスでエラーが検出されないことがある
+            # # その場合は次のループに検出を持ち越す
+            # if len(errors) > 0:
+            #     error = {"errors": errors}
+            #     # 自動復帰可能エラー
+            #     auto_recoverable = \
+            #         self.robot.are_all_errors_stateless(errors)
+            #     error["auto_recoverable"] = auto_recoverable
+            try:
+                is_emergency_stopped = self.rtde_r.isEmergencyStopped()
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+                # self.reconnect_after_timeout(e)
             # 切り替わるときにログを出す
             if is_emergency_stopped != last_is_emergency_stopped:
                 if is_emergency_stopped:
@@ -405,6 +419,16 @@ class UR_MON:
                     self.monitor_dict.update(actual_joint_js)
                 last = now
 
+            # デバッグ用
+            info = rtde_r_batch_monitor_status_only(self.rtde_r)
+            if last_info is None:
+                self.logger.info(info)
+            else:
+                diff_info = {k: v for k, v in info.items() if last_info[k] != v}
+                if diff_info:
+                    self.logger.info(diff_info)
+            last_info = info
+
             # MQTT手動制御モード時のみ記録する
             # それ以外の時のエラーはstate情報は必要ないと考えたため
             if f is not None and self.pose[15] == 1:
@@ -421,12 +445,13 @@ class UR_MON:
                     # TypeError: Object of type float32 is not JSON
                     # serializableへの対応
                     tool_id=float(tool_id),
+                    other=info,
                 )
                 js = json.dumps(datum, ensure_ascii=False)
                 f.write(js + "\n")
 
             if self.pose[32] == 1:
-                return False
+                return LoopResult.INTERRUPTED
 
             t_elapsed = time.time() - now
             t_wait = T_INTV - t_elapsed
@@ -476,24 +501,28 @@ class UR_MON:
                     with open(
                         os.path.join(self.logging_dir, "state.jsonl"), "a"
                     ) as f:
-                        will_change_log_file = self.monitor_start(f)
+                        res = self.monitor_start(f)
                 else:
-                    will_change_log_file = self.monitor_start()
-                if will_change_log_file:
+                    res = self.monitor_start()
+                if res == LoopResult.LOG_FILE_CHANGED:
                     self.get_logging_dir_and_change_log_file()
+                elif res == LoopResult.INTERRUPTED:
+                    self.disconnect_robot()
+                    if self.client is not None:
+                        self.client.loop_stop()
+                        self.client.disconnect()
+                    self.sm.close()
+                    time.sleep(1)
+                    self.logger.info("Process stopped")
+                    self.handler.close()
+                    self.robot_handler.close()
+                    break
+                elif res == LoopResult.NOT_CONNECTED:
+                    self.reconnect_robot()
             except Exception as e:
                 self.logger.error("Error in monitor")
                 self.logger.error(f"{self.format_error(e)}")
-            if self.pose[32] == 1:
-                if self.client is not None:
-                    self.client.loop_stop()
-                    self.client.disconnect()
-                self.sm.close()
-                time.sleep(1)
-                self.logger.info("Process stopped")
-                self.handler.close()
-                self.robot_handler.close()
-                break
+
 
 
 if __name__ == '__main__':
@@ -506,5 +535,5 @@ if __name__ == '__main__':
         cp.monitor_start()
     except KeyboardInterrupt:
         print("Monitor Main Stopped")
-        cp.robot.disable()
-        cp.robot.stop()
+        # cp.robot.disable()
+        # cp.robot.stop()
