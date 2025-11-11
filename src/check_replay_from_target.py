@@ -12,9 +12,9 @@ from typing import Optional
 
 import numpy as np
 
-from ur_control.ur_mqtt_control import ProcessManager
-from ur_control.config import SHM_NAME, SHM_SIZE
-from ur_control.tools import tool_infos
+from ur.ur_mqtt_control import ProcessManager
+from ur.config import SHM_NAME, SHM_SIZE
+from ur.tools import tool_infos
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
