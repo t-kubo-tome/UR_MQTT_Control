@@ -379,7 +379,7 @@ class ProcessManager:
         self.main_to_monitor_pipe.send(command)
 
     def enable(self):
-        self._send_command_to_control({"command": "enable", "wait": True})
+        return self._send_command_to_control({"command": "enable", "wait": True})
 
     def disable(self):
         self._send_command_to_control({"command": "disable", "wait": True})

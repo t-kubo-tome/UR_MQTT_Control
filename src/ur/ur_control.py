@@ -1979,8 +1979,9 @@ class UR_CON:
         while True:
             if control_pipe.poll(timeout=1):
                 command = control_pipe.recv()
+                status = False
                 if command["command"] == "enable":
-                    self.enable()
+                    status = self.enable()
                 elif command["command"] == "disable":
                     self.disable()
                 elif command["command"] == "set_area_enabled":
@@ -2020,7 +2021,7 @@ class UR_CON:
                         f"Unknown command: {command['command']}")
                 wait = command.get("wait", False)
                 if wait:
-                    control_pipe.send({"status": True})
+                    control_pipe.send({"status": status})
             if self.pose[32] == 1:
                 self.del_robot()
                 self.sm.close()

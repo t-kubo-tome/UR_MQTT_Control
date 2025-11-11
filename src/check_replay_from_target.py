@@ -153,9 +153,20 @@ class MQTTTargetReplayer:
         if self.use_joint_monitor_plot:
             self.pm.startMonitorGUI()
         # self.pm.startRecvMQTT()
-        self.pm.enable()
-        self._replay()
-        self.pm.disable()
+        i_retries = 0
+        max_retries_enable = 3
+        while True:
+            ret = self.pm.enable()
+            if ret:
+                break
+            i_retries += 1
+            if i_retries >= max_retries_enable:
+                self.logger.warning("Failed to enable robot after retries")
+                break
+        if ret:
+            self._replay()
+        # URでは毎回disableしなくてもいい
+        # self.pm.disable()
         self.pm.stop_all_processes()
         # TODO: Hanging here
         self.logger.info("Process stopped (except logging)")
