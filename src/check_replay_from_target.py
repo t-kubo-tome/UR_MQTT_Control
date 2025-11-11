@@ -106,6 +106,8 @@ class MQTTTargetReplayer:
                 j = 0
                 ts = []
                 joints = []
+                grips = []
+                grip = 0
                 for line in f:
                     js = json.loads(line)
                     if js["kind"] != "target":    
@@ -126,6 +128,12 @@ class MQTTTargetReplayer:
                     t = t - t_start
                     ts.append(t)
                     joints.append(joint)
+                    if "grip" in js:
+                        if js["grip"]:
+                            grip = 1
+                        else:
+                            grip = 2
+                    grips.append(grip)
             self.logger.info("Move to initial position")
             self.pm.move_joint(joints[0], wait=True)
             self.logger.info("Start replay")
@@ -138,6 +146,7 @@ class MQTTTargetReplayer:
                 t = time.time() - t0
                 if t >= ts[i]:
                     self.pm.ar[6:12] = joints[i]
+                    self.pm.ar[13] = grips[i]
                     i += 1
                 if i >= len(ts):
                     break
