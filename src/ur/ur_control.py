@@ -57,7 +57,9 @@ filter_kind: Literal[
     "moveit_servo_humble",
     "control_and_target_diff",
     "feedback_pd_traj",
-] = "original"
+    "none",
+    "filter_target_from_target_but_diff_from_control"
+] = "filter_target_from_target_but_diff_from_control"  # "original"
 speed_limits = np.array([240, 200, 240, 300, 300, 475])
 speed_limit_ratio = 0.35
 # NOTE: 加速度制限。スマートTPの最大加速度設定は単位が[rev/s^2]だが、[deg/s^2]とみなして、
@@ -498,6 +500,10 @@ class UR_CON:
                 elif filter_kind == "target":
                     _filter = SMAFilter(n_windows=n_windows)
                     _filter.reset(target)
+                elif filter_kind == "filter_target_from_target_but_diff_from_control":
+                    self.last_control = state
+                    _filter = SMAFilter(n_windows=n_windows)
+                    _filter.reset(target)
                 elif filter_kind == "state_and_target_diff":
                     self.last_control = state
                     _filter = SMAFilter(n_windows=n_windows)
@@ -517,16 +523,16 @@ class UR_CON:
                     Kd = 0.02
                     prev_error = np.zeros(6)
                     pd_step = 0
+                elif filter_kind == "none":
+                    self.last_control = state
 
                 # 速度制限をフィルタの手前にも入れてみる
-                if True:
-                    assert filter_kind in ["original", "feedback_pd_traj"]
-                    self.last_target_delayed_velocity = np.zeros(6)
+                self.last_target_delayed_velocity = np.zeros(6)
 
-                if filter_kind == "original":
-                    self.last_control_velocity = np.zeros(6)
-                elif filter_kind == "feedback_pd_traj":
+                if filter_kind == "feedback_pd_traj":
                     self.last_control_velocity = np.zeros((N - 1, 6))
+                else:
+                    self.last_control_velocity = np.zeros(6)
                 # ロボットにコマンドを送る前は、非常停止が押されているかを
                 # スレーブモードが解除されているかで確認する
                 if self.pose[37] != 1:
@@ -611,6 +617,9 @@ class UR_CON:
                 last_target_filtered = _filter.previous_filtered_measurement
                 target_filtered = _filter.filter(target_delayed)
                 target_diff = target_filtered - last_target_filtered
+            elif filter_kind == "filter_target_from_target_but_diff_from_control":
+                target_filtered = _filter.filter(target_delayed)
+                target_diff = target_filtered - self.last_control
             elif filter_kind == "state_and_target_diff":
                 # 失敗する
                 # 状態値に目標値の差分を足したものを平滑化する
@@ -710,6 +719,8 @@ class UR_CON:
                 pd_step += 1
                 if pd_step == N - 1:
                     pd_step = 0
+            elif filter_kind == "none":
+                target_diff = target_delayed - self.last_control
             else:
                 raise ValueError
 
@@ -756,6 +767,9 @@ class UR_CON:
                 _filter.filter(control)
             elif filter_kind == "target":
                 control = last_target_filtered + target_diff_speed_limited
+            elif filter_kind == "filter_target_from_target_but_diff_from_control":
+                # 前回制御値との差分を実機はモニタするので、これに対して速度制限をかけることが重要
+                control = self.last_control + target_diff_speed_limited
             elif filter_kind == "state_and_target_diff":
                 control = last_target_filtered + target_diff_speed_limited
             elif filter_kind == "moveit_servo_humble":
@@ -764,6 +778,8 @@ class UR_CON:
                 control = last_target_filtered + target_diff_speed_limited
             elif filter_kind == "feedback_pd_traj":
                 control = target_step_speed_limited
+            elif filter_kind == "none":
+                control = self.last_control + target_diff_speed_limited
             else:
                 raise ValueError
 
