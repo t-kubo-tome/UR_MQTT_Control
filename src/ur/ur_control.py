@@ -291,8 +291,10 @@ class UR_CON:
             if tool_corrected != last_tool_corrected:
                 try:
                     if tool_corrected == 1:
+                        self.logger.info("Send grip command to hand")
                         self.send_grip()
                     elif tool_corrected == 2:
+                        self.logger.info("Send release command to hand")
                         self.send_release()
                 except Exception as e:
                     with lock:
