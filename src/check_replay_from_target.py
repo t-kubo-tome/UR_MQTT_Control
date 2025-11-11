@@ -200,13 +200,13 @@ if __name__ == '__main__':
         default="log_replay",
         help="ログを保存するディレクトリのパス",
     )
-    parser.add_argument(
-        "--tool-id",
-        type=int,
-        required=True,
-        choices=tool_ids,
-        help="現在ロボットに付いているツールのID",
-    )
+    # parser.add_argument(
+    #     "--tool-id",
+    #     type=int,
+    #     required=True,
+    #     choices=tool_ids,
+    #     help="現在ロボットに付いているツールのID",
+    # )
     parser.add_argument(
         "--use-joint-monitor-plot",
         action="store_true",
@@ -229,7 +229,9 @@ if __name__ == '__main__':
     import os
     # HACK: コードの変化を少なくするため、
     # ロボット制御プロセスに引数で渡すのではなく環境変数で渡す
-    os.environ["TOOL_ID"] = str(kwargs.pop("tool_id"))
+    # os.environ["TOOL_ID"] = str(kwargs.pop("tool_id"))
+    # NOTE: 現状URではツールIDは1固定
+    os.environ["TOOL_ID"] = "1"
 
     replayer = MQTTTargetReplayer(**kwargs)
     replayer.run()
