@@ -291,7 +291,6 @@ class UR_MON:
                 self.logger.error(f"{self.format_error(e)}")
                 # self.reconnect_after_timeout(e)
                 actual_joint = None
-            # TODO: フォーマットを確認
             if actual_joint is not None:
                 if MQTT_FORMAT == 'UR-realtime-control-MQTT':        
                     joints = ['j1','j2','j3','j4','j5','j6']

@@ -121,9 +121,8 @@ if use_custom_script:
     if not os.path.exists(script_path):
         raise FileNotFoundError(f"Custom script file not found: {script_path}")
     # from script_client import ScriptClient
-    # # TODO: 詳細
     # rtde_sc = ScriptClient(robot_ip, 5, 17, 30003, True)
-    # # TODO: ソースコードのpybind部分が引数をうけつけないバグになっている
+    # # NOTE: ソースコードのpybind部分が引数をうけつけないバグになっている
     # rtde_sc.setScriptFile(script_path)
     # corrected_script = rtde_sc.getScript()
     # script_path = os.path.join(os.path.dirname(__file__), "../ur_control/scripts/generated/rtde_control_original_corrected.script")
@@ -159,9 +158,8 @@ print(f"{rtde_d.isConnected()=}")
 # rtde_d.powerOn()
 # # Powers off the robot arm.
 # rtde_d.powerOff()
-# # Powers off the robot arm. ドキュメントにはこうあるが正しいか不明
+# # Powers off the robot arm. ドキュメントにはこうあるが間違い。正しくはEnable the robot arm.に相当
 # rtde_d.brakeRelease()
-# TODO: この機能制限ならどういう用途で使う?勝手にProtectiveStopはUnlockされるということか
 # Closes the current popup and unlocks protective stop.
 # The unlock protective stop command fails with an exception if less than 5 seconds has passed since the protective stop occurred.
 # rtde_d.unlockProtectiveStop()
@@ -184,7 +182,6 @@ print(f"{rtde_d.isInRemoteControl()=}")
 
 # この有無でgetActualTCPForce()の値が変わるか確認する
 # This function is used for enabling and disabling the use of external F/T measurements in the controller.
-# NOTE: パラメータあり
 # これをservoStop -> MoveJの間に入れるとProtective Stop (C207A0: Fieldbus input disconnected)となる
 # servoJの前でも駄目 (同じエラー)
 # enable = True
@@ -434,9 +431,8 @@ if False:
         else:
             break
     time.sleep(10)
-    # TODO: この方法で自動復帰できたが、もう少しスマートな方法があるかもしれない
-    # TODO: rtde_c.moveJ(deg2rad_list(default_joints))=True
-    # なさそう
+    # NOTE: この方法で自動復帰できたが、もう少しスマートな方法があるかもしれない
+    # →もう少し試行錯誤したがなさそう
     print(rtde_c_batch_monitor(rtde_c))
     print(rtde_d_batch_monitor(rtde_d))
     print(rtde_r_batch_monitor(rtde_r))
@@ -532,7 +528,7 @@ if False:
         joint_q[0] += 0.045
         joint_q[5] += 0.045
         # Used for waiting the rest of the control period, set implicitly as dt = 1 / frequency. 
-        # NOTE: the function is to be used in combination with the initPeriod().
+        # the function is to be used in combination with the initPeriod().
         # dtとrtde_frequencyは厳密には一緒じゃなくても可能
         rtde_c.waitPeriod(t_start)
         if i % 200 == 0:
@@ -556,7 +552,6 @@ for i in range(5):
     print(f"{t_start=}")
     rtde_r.waitPeriod(t_start)
 
-# TODO: 要確認
 # BEGIN
 
 # Checks if the given joint position is reachable and within the current safety 
@@ -643,7 +638,6 @@ print(f"{rtde_c.isConnected()=}")
 # rtde_c.moveJ(deg2rad_list(default_joints))=False
 print(f"{rtde_c.moveJ(deg2rad_list(default_joints))=}")
 
-# TODO: 要確認
 # BEGIN
 # RTDE - Socket disconnected
 # rtde_c.disconnect()=None
@@ -678,7 +672,6 @@ print(f"{rtde_c.isConnected()=}")
 
 print(f"{rtde_c.isConnected()=}")
 # This function will terminate the script on controller.
-# TODO: rtde_c.disconnect()とどっちが先?別に必ずしも後始末として呼ぶ必要はない?
 print(f"{rtde_c.stopScript()=}")
 
 rtde_d.disconnect()
