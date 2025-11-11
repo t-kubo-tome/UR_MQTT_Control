@@ -101,6 +101,8 @@ speed_tool_change = 2
 # 目標値が状態値よりこの制限より大きく乖離した場合はロボットを停止させる
 # 設定値は典型的なVRコントローラの動きから決定した
 target_state_abs_joint_diff_limit = [30, 30, 40, 40, 40, 60]
+use_first_speed_limit = False
+use_second_speed_limit = False
 
 save_control = SAVE
 
@@ -558,8 +560,9 @@ class UR_CON:
 
             sw.lap("1st speed limit")
             # 速度制限をフィルタの手前にも入れてみる
-            if True:
-                assert filter_kind in ["original", "feedback_pd_traj"]
+            first_max_ratio = None
+            first_accel_max_ratio = None
+            if use_first_speed_limit:
                 target_diff = target_delayed - self.last_target_delayed
                 # 速度制限
                 dt = now - self.last
@@ -569,6 +572,7 @@ class UR_CON:
                 if max_ratio > 1:
                     v /= max_ratio
                 target_diff_speed_limited = v * dt
+                first_max_ratio = max_ratio
 
                 # 加速度制限
                 a = (v - self.last_target_delayed_velocity) / dt
@@ -578,6 +582,7 @@ class UR_CON:
                     a /= accel_max_ratio
                 v = self.last_target_delayed_velocity + a * dt
                 target_diff_speed_limited = v * dt
+                first_accel_max_ratio = accel_max_ratio
 
                 # 速度がしきい値より小さければ静止させ無駄なドリフトを避ける
                 # NOTE: スレーブモードを落とさないためには前の速度が十分小さいとき (しきい値は不明) 
@@ -709,34 +714,39 @@ class UR_CON:
                 raise ValueError
 
             sw.lap("2nd speed limit")
-            if filter_kind != "feedback_pd_traj":
-                # 速度制限
-                dt = now - self.last
-                v = target_diff / dt
-                ratio = np.abs(v) / (speed_limit_ratio * speed_limits)
-                max_ratio = np.max(ratio)
-                if max_ratio > 1:
-                    v /= max_ratio
-                target_diff_speed_limited = v * dt
+            max_ratio = None
+            accel_max_ratio = None
+            if use_second_speed_limit:
+                if filter_kind != "feedback_pd_traj":
+                    # 速度制限
+                    dt = now - self.last
+                    v = target_diff / dt
+                    ratio = np.abs(v) / (speed_limit_ratio * speed_limits)
+                    max_ratio = np.max(ratio)
+                    if max_ratio > 1:
+                        v /= max_ratio
+                    target_diff_speed_limited = v * dt
 
-                # 加速度制限
-                a = (v - self.last_control_velocity) / dt
-                accel_ratio = np.abs(a) / (accel_limit_ratio * accel_limits)
-                accel_max_ratio = np.max(accel_ratio)
-                if accel_max_ratio > 1:
-                    a /= accel_max_ratio
-                v = self.last_control_velocity + a * dt
-                target_diff_speed_limited = v * dt
+                    # 加速度制限
+                    a = (v - self.last_control_velocity) / dt
+                    accel_ratio = np.abs(a) / (accel_limit_ratio * accel_limits)
+                    accel_max_ratio = np.max(accel_ratio)
+                    if accel_max_ratio > 1:
+                        a /= accel_max_ratio
+                    v = self.last_control_velocity + a * dt
+                    target_diff_speed_limited = v * dt
 
-                # 速度がしきい値より小さければ静止させ無駄なドリフトを避ける
-                # NOTE: スレーブモードを落とさないためには前の速度が十分小さいとき (しきい値は不明) 
-                # にしか静止させてはいけない
-                if np.all(target_diff_speed_limited / dt < stopped_velocity_eps):
-                    target_diff_speed_limited = np.zeros_like(
-                        target_diff_speed_limited)
-                    v = target_diff_speed_limited / dt
+                    # 速度がしきい値より小さければ静止させ無駄なドリフトを避ける
+                    # NOTE: スレーブモードを落とさないためには前の速度が十分小さいとき (しきい値は不明) 
+                    # にしか静止させてはいけない
+                    if np.all(target_diff_speed_limited / dt < stopped_velocity_eps):
+                        target_diff_speed_limited = np.zeros_like(
+                            target_diff_speed_limited)
+                        v = target_diff_speed_limited / dt
 
-                self.last_control_velocity = v
+                    self.last_control_velocity = v
+            else:
+                target_diff_speed_limited = target_diff
 
             sw.lap("Get control")
             # 平滑化の種類による対応
@@ -779,6 +789,8 @@ class UR_CON:
                     joint=control.tolist(),
                     max_ratio=max_ratio,
                     accel_max_ratio=accel_max_ratio,
+                    first_max_ratio=first_max_ratio,
+                    first_accel_max_ratio=first_accel_max_ratio,
                 ),
             ]
             sw.lap("Save control - save to queue")
