@@ -199,7 +199,7 @@ class UR_MON:
             if last_health_check == 0:
                 last_health_check = now
             
-            if last_health_check + 5 < now:
+            if last_health_check + 60 < now:
                 last_health_check = now
                 self.logger.info("Health check: Robot monitor is running")
 
