@@ -340,15 +340,21 @@ class UR_MON:
                     else:
                         force = float(force - 100)
 
-            # モータがONか
+            # プログラム/電源がONか
+            # 電源がOFFになると以降のモニタプロセスの値は更新されなくなる
+            # (ロボットコントローラ上のメモリの最後に更新された値が出力され続けるイメージ)
             try:
-                robot_mode = self.rtde_r.getRobotMode()
-                enabled = robot_mode == RobotMode.ROBOT_MODE_RUNNING
+                robot_status = self.rtde_r.getRobotStatus()
+                robot_status_parsed = parse_robot_status(robot_status)
+                enabled = robot_status_parsed["IS_PROGRAM_RUNNING"]
+                is_power_on = robot_status_parsed["IS_POWER_ON"]
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
                 # self.reconnect_after_timeout(e)
                 enabled = False
+                is_power_on = False
             actual_joint_js["enabled"] = enabled
+            actual_joint_js["is_power_on"] = is_power_on
 
             # スレーブモードかどうかを取得する
             is_in_servo_mode = False
