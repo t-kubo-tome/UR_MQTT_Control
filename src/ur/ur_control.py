@@ -1018,6 +1018,7 @@ class UR_CON:
             return False
 
     def disable(self) -> None:
+        self.logger.info("Disabling robot")
         try:
             # 制御クライアントを削除して接続を切る
             # TODO: もうすこしスマートにできるかも
