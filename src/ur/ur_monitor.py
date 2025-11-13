@@ -5,7 +5,6 @@ import logging
 from typing import Any, Dict, List, TextIO
 from paho.mqtt import client as mqtt
 
-import datetime
 import time
 
 import os
@@ -21,10 +20,14 @@ from dotenv import load_dotenv
 
 from config import SHM_NAME, SHM_SIZE, T_INTV
 from tools import tool_infos, tool_classes
-from utils import parse_robot_status, pose_m_rad_to_mm_deg, rad2deg_list, rtde_r_batch_monitor_status_only
-
+from utils import (
+    parse_robot_status,
+    parse_safety_status_bits,
+    pose_m_rad_to_mm_deg,
+    rad2deg_list,
+    rtde_r_batch_monitor_status_only,
+)
 # Robot specific modules
-from ur_robot import RobotMode
 from rtde_receive import RTDEReceiveInterface as RTDEReceive
 
 
@@ -453,7 +456,7 @@ class UR_MON:
             else:
                 diff_info = {k: v for k, v in info.items() if last_info[k] != v}
                 if diff_info:
-                    self.logger.info(diff_info)
+                    self.logger.info(f"Diff in status: {diff_info}")
             last_info = info
 
             # MQTT手動制御モード時のみ記録する
