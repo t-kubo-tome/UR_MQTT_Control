@@ -371,13 +371,12 @@ class UR_MON:
             is_emergency_stopped = False
             error = {}
             try:
-                # プログラムが動いていない場合はエラーを取得しない、これが最も安定なサイン
-                # TODO: 詳細なエラーが取得できるかは要検討
-                getRobotStatus = self.rtde_r.getRobotStatus()
-                getRobotStatus_parsed = parse_robot_status(getRobotStatus)
-                is_program_running = getRobotStatus_parsed["IS_PROGRAM_RUNNING"]
-                if not is_program_running:
-                    errors = [{"error_code": 0, "error_message": "No program running"}]
+                getSafetyStatusBits = self.rtde_r.getSafetyStatusBits()
+                getSafetyStatusBits_parsed = \
+                    parse_safety_status_bits(getSafetyStatusBits)
+                is_normal_mode = getSafetyStatusBits_parsed["IS_NORMAL_MODE"]
+                if not is_normal_mode:
+                    errors = [{"error_code": 0, "error_message": "Safety mode is not NORMAL"}]
                 else:
                     errors = []
             except Exception as e:
