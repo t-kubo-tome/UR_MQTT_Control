@@ -988,18 +988,33 @@ class UR_CON:
                 import gc
                 gc.collect()
                 self.rtde_c = None
-            # エラーを送出する可能性あり
-            self.rtde_c = RTDEControl(
-                ROBOT_IP,
-                rtde_frequency,
-                flags,
-                ur_cap_port,
-                rt_control_priority,
-            )
+            # 1回では上手く行かないことが多く、2回で大体上手く行く
+            for i in range(3):
+                try:
+                    # エラーを送出する可能性あり
+                    self.rtde_c = RTDEControl(
+                        ROBOT_IP,
+                        rtde_frequency,
+                        flags,
+                        ur_cap_port,
+                        rt_control_priority,
+                    )
+                except RuntimeError as e_retry:
+                    if "ur_rtde: Failed to start control script, before timeout of 5 seconds" not in str(e_retry):
+                        raise e_retry
+                    if i == 2:
+                        raise e_retry
+                    # 少し待たないと以下のエラーが出ることがある
+                    # RuntimeError: One of the RTDE input registers are already in use! Currently you must disable the EtherNet/IP adapter, PROFINET or any MODBUS unit configured on the robot. This might change in the future.
+                    time.sleep(1)
+                else:
+                    break
             return True
         except Exception as e:
             self.logger.error("Error enabling robot")
             self.logger.error(f"{self.format_error(e)}")
+            if "ur_rtde: Failed to start control script, before timeout of 5 seconds" in str(e):
+                self.logger.error("This error may occur occasionally. Try enabling several times before giving up")
             return False
 
     def disable(self) -> None:
