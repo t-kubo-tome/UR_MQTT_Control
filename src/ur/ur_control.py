@@ -1065,18 +1065,26 @@ class UR_CON:
 
     def clear_error(self) -> None:
         try:
-            self.logger.info("Clearing errors started")
+            self.logger.info("Clearing robot error")
             errors = rtde_d_batch_monitor(self.rtde_d)
             # triggerProtectiveStopの検証必要
             self.logger.info(f"Errors in teach pendant: {errors}")
-            # self.rtde_d.closePopup()
+            
+            # ポップアップを閉じる複数の方法を試みる
+            # ポップアップが無い場合は何もされない
+            # closePopupとcloseSafetyPopupはしなくても次にenableは可能
+            # 一般的なポップアップを閉じる
+            self.rtde_d.closePopup()
+            # 加速度エラーなどのTPのポップアップや
+            # 緊急停止ボタンを押して戻した後のTPのポップアップを閉じる
+            self.rtde_d.closeSafetyPopup()
+            # Protective Stop時にこれを実行しないとenableできないかは不明
+            # Protective Stopのポップアップを閉じ、Protective Stopを解除する
+            self.rtde_d.unlockProtectiveStop()
+            
             safetystatus = errors["safetystatus"].split(": ")[-1]
             if safetystatus == "FAULT":
-                self.rtde_d.closeSafetyPopup()
                 self.rtde_d.restartSafety()
-            # self.rtde_d.unlockProtectiveStop()
-            self.logger.info(
-                "Clearing errors finished. Please enable the robot if use.")
         except Exception as e:
             self.logger.error("Error clearing robot error")
             self.logger.error(f"{self.format_error(e)}")        
@@ -1118,7 +1126,9 @@ class UR_CON:
             errors = rtde_d_batch_monitor(self.rtde_d)
             self.logger.error(f"Errors in teach pendant: {errors}")
             # 1回自動復帰する
+            self.rtde_d.closePopup()
             self.rtde_d.closeSafetyPopup()
+            self.rtde_d.unlockProtectiveStop()
             self.rtde_d.restartSafety()
             ret = self.enable()
             if ret:
