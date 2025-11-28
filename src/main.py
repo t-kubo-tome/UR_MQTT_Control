@@ -10,8 +10,9 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import Optional
 
+from ur.config import ROBOT_NAME
 from ur.ur_mqtt_control import ProcessManager
-from ur.tools import tool_infos
+from ur.ur_tools import tool_infos
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
@@ -130,7 +131,7 @@ class MQTTWin:
         self.logger.info("Starting Process!")
  
         self.root = root
-        self.root.title("MQTT-UR Controller")
+        self.root.title(f"MQTT-{ROBOT_NAME} Controller")
         self.root.geometry("1100x1000")
 
         for col in range(10):
