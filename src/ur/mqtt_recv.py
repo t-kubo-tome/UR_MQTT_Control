@@ -82,9 +82,7 @@ class MQTT_Recv:
         if msg.topic == self.mqtt_ctrl_topic:
             js = json.loads(msg.payload)
 
-            joints=['j1','j2','j3','j4','j5','j6']
-            rot =[js[x]  for x in joints]    
-            joint_q = [x for x in rot]
+            joint_q = js["joints"]
             self.pose[6:12] = joint_q 
 
             if "grip" in js:
