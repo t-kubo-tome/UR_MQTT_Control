@@ -6,11 +6,11 @@ from multiprocessing import Process
 
 import numpy as np
 
-from ur.config import SHM_NAME, SHM_SIZE, ROBOT_NAME
-from ur.ur_control import UR_CON, UR_CON_Archiver
-from ur.ur_monitor import UR_MON
-from ur.monitor_gui import run_joint_monitor_gui
-from ur.mqtt_recv import MQTT_Recv
+from .config import SHM_NAME, SHM_SIZE, ROBOT_NAME
+from .ur_control import UR_CON, UR_CON_Archiver
+from .ur_monitor import UR_MON
+from .monitor_gui import run_joint_monitor_gui
+from .mqtt_recv import MQTT_Recv
 
 
 class ProcessManager:
