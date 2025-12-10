@@ -85,8 +85,8 @@ class MQTT_Recv:
             joint_q = js["joints"]
             self.pose[6:12] = joint_q 
 
-            if "grip" in js:
-                if js['grip']:
+            if "grip" in js and len(js["grip"]) > 0:
+                if js["grip"][0]:
                     self.pose[13] = 1
                 else:
                     self.pose[13] = 2
